@@ -1,0 +1,467 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  out.width = '70%',
+  fig.align = 'center'
+)
+pdf.options(encoding = 'ISOLatin2')
+`%>%` <- magrittr::`%>%`
+```
+
+# Efektívne programovanie
+
+R je i napriek občasným frustrujúcim zážitkom elegantný jazyk, dobre stavaný na analýzu údajov a štatistiku. Jeho efektivita vo veľkej miere závisí od spôsobu, akým je používaný -- architektúra kódu (zrozumiteľnosť a škálovateľnosť), využívanie pokročilých nástrojov a HW vybavenia, prepojenie s inými jazykmi (ktoré sú na danú úlohu optimálne). Práve na tieto výzvy sa snažia reagovať nasledujúce podkapitoly.
+
+Komplexnejšie túto problematiku rozoberá napr. kniha [@gillespie2016efficient].
+
+## Kvalita kódu
+
+Dobrý kód je nielen funkčný a rýchly, ale aj čitateľný. Môžeme si vytvoriť vlastný štýl písania kódu (a môže to dopadnúť všelijako, https://xkcd.com/1513/) alebo sa inšpirujeme tými skúsenejšími medzi nami:
+
+- http://adv-r.had.co.nz/Style.html  
+- https://style.tidyverse.org/  
+- https://google.github.io/styleguide/Rguide.html  
+
+Podpora formátovania v štýle *tidyverse* je v prostredí RStudio zakomponovaná prostredníctvom balíkov *styler* alebo *lintr*. Štýlom sa rozumejú zásady ako napr.:
+
+- názvy súborov by mali byť zmysluplné, končiť `.R` (alebo `.Rmd`) nie `.r`, mali by byť zmysluplné a obsahovať len alfanumerické znaky, pomlčku `-` a podčiarkovník `_`, 
+- názvy objektov (podstatné mená) a funkcií (slovesá) obsahujú malé písmená, čísla a znak `_`, neprekrývajú názvy už bežne používané v systéme R,
+- medzera po čiarke aj okolo operátorov `<-`, `+`, `-`, `==`,
+- definícia objektov mimo volaní funkcií
+- zátvorky ohraničujúce bloky umiestniť: `{` na koniec riadku, a `}` na začiatok riadku,
+- identifikácia argumentov plnými menami,
+- vyhnúť sa implicitnej konverzii dátového typu,
+- dlhšie volanie funkcie rozdeliť na viac riadkov, argumenty zoskupiť podľa dĺžky alebo logického súvisu,
+- preferovať `"` pred `'` pri tvorbe reťazcov, plné názvy logických hodnôt (TRUE,FALSE) pred skratkami (T,F),
+- komentáre by mali začínať mriežkou a medzerou, a ak je komentárov viac ako kódu, vhodnejší než R script bude formát RMarkdown,
+- komentáre v kóde by mali vysvetľovať "prečo", a nie "čo" alebo "ako". Mali by začínať veľkým písmenom ako veta - v prípade viacerých viet končiť bodkou.
+- Použiť `return()` iba ak treba funkciu ukončiť predčasne,
+- vyhnúť sa reťazeniu príkazov pomocou "potrubia" `%>%`, ak treba manipulovať naraz viac ako s jedným objektom alebo pomenovať medzivýsledky,
+- pred pipe operátor by mala byť medzera a za ním zalomenie riadku,
+- vyhnúť sa reťazeniu funkcií bez naznačených zátvoriek, použitiu `%<>%` alebo priradeniu premennej na konci potrubia.
+- Podobné zásady ako pre potrubie platí aj pre spájanie vrstiev *ggplot*.
+
+
+
+
+## Zapojenie celého procesoru - paralelizácia
+
+Veľa výpočtov v R sa dá zrýchliť paralelizáciou. Paralelný výpočet je súbežné vykonávanie odlišných častí rozsiahleho výpočtu na viacerých procesorových jednotkách (vlákna, jadrá, procesory). Teoreticky ak jedna paralelizovateľná úloha zaberie na jednom procesore $x$ sekúnd, potom na $n$ procesoroch by mala trvať $x/n$ sekúnd. Prakticky sa to dosiahnuť nedá, pretože určitý čas zaberie rozdeľovanie čiastkových úloh, prenos údajov či čakanie na pomalšie súčasti, no aj priblíženie k tomu času stojí za námahu pri návrhu kódu. Obzvlášť v modernej dobe, keď sú aj bežné osobné počítače osadené mnohojadrovými procesormi.  
+
+Trochu teórie a hlavne praktické príklady použitia štandardného balíku *parallel* nájdeme v lekcii [@errickson2020parallel], či v knihe [@peng2016r, kapitola 22 Parallel Computation].
+
+Sú dve metódy paralelizácie: 
+
+ - *Socket* spustí novú reláciu R osobitne na každom jadre (ako po sieti). Výhodou metódy je, že funguje na ľubovoľnom operačnom systéme, nevýhodou nutnosť načítať všetky potrebné balíky, funkcie, nastavenia a objekty.
+ - *Forking* skopíruje aktuálnu reláciu R na každé jadro. Výhodou je implementačná jednoduchosť a vyššia rýchlosť, nevýhodou naopak to, že funguje len na tzv. POSIX systémoch (BSD, Linux, Mac, Unix) a nie na OS Windows.
+ 
+
+Najlepšie sa paralelizujú cykly, ktorých slučky sú navzájom nezávislé, teda funkcie ako *apply* a *lapply*. Ich argumentom je jednak matica, data.frame alebo list, a jednak funkcia, ktorá sa aplikuje na každý riadok, stĺpec, alebo element. Ilustrujme to na jednoduchom príklade, v ktorom treba zoradiť prvky stĺpcov matice podľa veľkosti. Najprv vytvoríme jednoduchú funkciu pre zoradenie prvkov jedného vektora pomocou vnorených for-cyklov a podmienky, a overíme jeho funkčnosť:
+```{r}
+sort_for <- function(x) {
+  n <-length(x)
+  for(i in 1:(n-1)) {
+          for(j in (i+1):n) {
+                  xi <- x[i]
+                  if(x[j] < xi) {
+                          x[i] <- x[j]
+                          x[j] <- xi
+                  }
+          }
+  }
+  x
+}
+sort_for(c(3,2,4,2))
+```
+Na ilustráciu poslúži matica náhodných čísel z normálneho rozdelenia rozmeru $1000\times12$.
+```{r}
+n <- 12e+3
+mat <- matrix(rnorm(n), n/12, 12)
+str(mat)
+```
+Rýchlosť zoradenia jedného stĺpca 
+```{r}
+system.time( sort_for(mat[,1]) )
+```
+je približne 1/12 času potrebného na zoradenie všetkých stĺpcov sériovo (jedného po druhom).
+```{r}
+system.time( apply(mat, 2, sort_for) )
+```
+(Tzv. *user time* je čas, ktorý procesoru zabral beh systému R, naopak *system time* pre danú úlohu venoval operačný systém a nakoniec *elapsed time* je čas, ktorý uplynul od spustenia po ukončenie úlohy. Ak je *elapsed* nižší ako súčet ostatných dvoch dokopy, pravdepodobne sa k slovu dostala implicitná paralelizácia. Na druhú stranu, ak je väčší, bežia v systéme aj iné, nesúvisiace ale časovo náročné úlohy.)
+
+Ak procesor podporuje prácu vo viacerých vláknach, je možné štandardné sériové riešenie paralelizovať, a to napr. pomocou predinštalovaného balíka *parallel*.
+```{r}
+library(parallel)
+```
+Najprv zistíme počet logických jadier (vlákien). Z nich je potom bezpečné jedno vlákno ponechať pre beh operačného systému.
+```{r}
+detectCores()
+```
+Postup aplikovaný pri paralelizácii je zhrnutý v nasledujúcich bodoch:
+
+1. Rozdelenie údajov na jednotlivé vlákna.
+2. Skopírovanie funkcie na každé z vlákien.
+3. Súbežné vykonanie funkcie na podmnožine údajov.
+4. Zhromaždenie výsledkov zo všetkých vlákien.
+
+Pri každej súbežnej slučke cyklu sa čaká na dokončenie výpočtov zo všetkých vlákien a až potom začne nová, preto je vhodné navrhnúť podmnožiny údajov vyvážene. Náš prípad je z tohto pohľadu triviálny, pretože podmnožiny súboru údajov (stĺpce matice) sú rovnako veľké.  
+
+V systéme Linux najprv skúsime metódu **forking**. Keďže však balík *parallel* nemá analógiu funkcie *apply* pre túto metódu, treba stĺpce najprv oddeliť, až potom použiť *mclapply*.
+```{r}
+mat_list <- split(mat, col(mat))
+
+cas <- system.time(
+  mclapply(mat_list, sort_for, mc.cores = 3)
+)
+cas
+```
+Čas sa paralelizáciou zredukoval približne na polovicu, z toho drvivú väčšinu tvorí čas "child" procesov vyvedených z rodičovského ako hroty vidličky (fork).
+```{r}
+c(cas)
+```
+Druhá metóda **socket** vyžaduje najprv vytvorenie strapca (cluster) R sedení, do ktorých musíme exportovať našu funkciu. Klaster môže bežať na jadrách jedného osobného počítača, procesoroch jedného servera ale kľudne aj na počítačoch jednej počítačovej siete. 
+```{r}
+cl <- makeCluster(3)
+clusterExport(cl, varlist = c("sort_for"))
+system.time(
+  parApply(cl, X = mat, MARGIN = 2, FUN = sort_for)
+)
+stopCluster(cl)
+```
+Tento prístup neumožňuje priame zistenie času spotrebovaného v "klastri".
+
+
+Na záver treba ešte raz upozorniť, že uvedený príklad je iba ilustračný, systém R má zabudovaný oveľa efektívnejší nástroj na zoradenie prvkov vektora.
+```{r}
+system.time( apply(mat, MARGIN = 2, sort) )
+```
+Funkcia *sort*, tak ako väčšina ostatných v systéme R, je implementovaná v niektorom z kompilovaných programovacích jazykov. V nasledujúcej kapitole si ukážeme ako prepojiť všestrannosť intepretovaného jazyka R s rýchlosťou kompilovaného jazyka C.
+
+
+
+
+
+
+<!-- - 4.body postupu pri paralelizacii (Peng) -->
+<!-- - rank, median -->
+<!-- - mclapply user.child -->
+<!-- - memory to be used -->
+<!-- - error handling -->
+<!-- - random generator -->
+<!-- - bootstrap median confidence interval -->
+
+
+## Zrýchlenie výpočtov pomocou C(++)
+
+Niekedy rýchlosť intepretovaného kódu R nestačí. Môže byť dobre odladený, môžu byť efektívne využité natívne knižnice alebo zapojené všetky dostupné procesorové vlákna, jednoducho na zvolenú úlohu nestačí. Sú to najmä nasledujúce príklady, kedy prichádza čas využiť výhody kompilovaného kódu jazyka C:
+
+ - cykly, ktoré sa nedajú ľahko vektorizovať kvôli závislosti po-sebe-nasledujúcich iterácií, 
+ - rekurzívne úlohy, pri ktorých sa niektoré funkcie volajú mnoho miliónov-krát,
+ - úlohy vyžadujúce dátové štruktúry a algoritmy, ktorými Rko nedisponuje (ordered maps, double-ended queues ...).
+ 
+Balík *Rcpp* výrazne zjednodušuje prepojenie C++ a R, a to obojsmerne, čiže umožňuje využiť rýchlosť jedného v druhom a bohatstvo knižníc druhého v prvom. Na začiatok odporúčam prehľadový článok [@eddelbuettel2018extending], neskôr základnú príručku  [@wickham2019advanced, kapitola High performance functions with Rcpp v prvej verzii a kapitola 25 Rewriting R code in C++ v druhej verzii knihy] a nakoniec podrobný manuál [@tsuda2019rcpp]. 
+
+### Jednoduchý príklad
+
+Pre jednoduchú ilustráciu prepíšme funkciu na zoradenie prvkov vektora z predošlej časti do jazyka C
+```{r}
+library(Rcpp)
+cppFunction('NumericVector sort_C(NumericVector x) {
+  int n = x.size();
+  double xi;
+  for(int i = 0; i <= n-2; ++i) {
+    for(int j = i+1; j <= n-1; ++j) {
+      xi = x[i]; 
+      if (x[j] < xi) {
+        x[i] = x[j];
+        x[j] = xi;
+      }
+    }
+  }
+  return x;
+}')
+sort_C(c(3,2,4,2))
+```
+a porovnajme čas potrebný na vykonanie oboch funkcií, ak vstupný vektor má 5000 prvkov.
+```{r}
+vec <- rnorm(5e3)
+system.time( sort_for(vec) )
+system.time( sort_C(vec) )
+```
+Kompilovaný kód je v tomto prípade asi 1OO-násobne rýchlejší oproti interpretovanému. 
+
+Samozrejme vstavaná funkcia *sort* je ešte oveľa rýchlejšia, pretože jej implementácia v jazyku C je optimalizovaná.
+```{r}
+system.time( sort(vec) )
+```
+### Maticové výpočty
+
+Štýl tvorenia kódu C++ (nielen v prostredí Rcpp) závisí od použitých knižníc, napr. manipuláciu s poliami (najmä vektory a matice) veľmi uľahčuje knižnica _Armadillo_ (a s Rcpp jej implementácia _RcppArmadillo_). Nástroje každej knižnice (či je to Rcpp, Armadillo alebo štandardná knižnica _std_) však zväčša vyžadujú vlastné dátové štruktúry (napr. Rcpp::NumericVector oproti arma::vec), medzi ktorými je treba robiť konverziu, aby sa tieto nástroje dali využiť. Nasleduje zoznam užitočných zdrojov týkajúcich sa práce s poliami a najmä s knižnicou Armadillo:  
+ - http://arma.sourceforge.net/docs.html  
+ - https://github.com/petewerner/misc/wiki/RcppArmadillo-cheatsheet
+ - https://thecoatlessprofessor.com/programming/cpp/common-operations-with-rcpparmadillo/
+ - https://scholar.princeton.edu/sites/default/files/q-aps/files/slides_day4_am.pdf
+ - https://zenglix.github.io/Rcpp_basic/  
+
+Použitie knižnice *Rcpparmadillo* ilustruje nasledujúci príklad, v ktorom pomocou metódy bootstrap vypočítame intervalový odhad parametrov lineárneho štatistického modelu. Téma modelovania pozorovaných údajov presahuje záber tejto učebnice, žiadna kapitola sa jej doteraz nevenovala, preto je na tomto mieste potrebný krátky úvod do problému. 
+Majme dve náhodné premenné X (hmotnosť automobilu) a Y (zdvihový objem valcov) a predpokladajme lineárnu závislosť medzi nimi, $Y = a + b X + \varepsilon$, kde okrem deterministickej časti s parametrami $a$ (absolútny člen, tzv. *intercept*) a $b$ (sklon, *slope*) vystupuje aj náhodný člen $\varepsilon$ (šum, *noise*). Parametre sú väčšinou neznáme, no dajú sa na základe konkrétnych pozorovaní premenných $X$ a $Y$ odhadnúť. Keďže sa dá model prepísať na $Y = (a,b)(1,X) + \varepsilon$, dosadením $n$ pozorovaní $x_i$ a $y_i$ dostaneme sústavu $n$ rovníc $y_i = (a,b)(1,x_i)+\varepsilon$, $i=1,\ldots,n$, v maticovom tvare 
+\[
+\mathbf{y}=\mathbf{X}\cdot\beta + \boldsymbol{\varepsilon},\qquad \text{kde }\quad 
+\mathbf{y}=\begin{pmatrix} y_1 \\ \vdots \\ y_n\end{pmatrix},\quad 
+\mathbf{X}= \begin{pmatrix} 1 & x_1 \\ \vdots & \vdots \\ 1 & x_n\end{pmatrix},\quad
+\boldsymbol{\varepsilon} = \begin{pmatrix} \varepsilon_1 \\ \vdots \\ \varepsilon_n\end{pmatrix},
+\]
+o dvoch neznámych $\beta=(a,b)^T$. Sústava je pre $n>2$ zjavne preurčená, a tak našim cieľom je dostať _čo najlepší_ odhad $\beta$. Najčastejšie používaná metóda -- metóda maximálnej vierohodnosti -- je v prípade normálne rozdeleného šumu $\varepsilon_i\sim N(0,\sigma)$, $\forall i$, totožná s metódou najmenších štvorcov, ktorá minimalizuje súčet druhých mocnín prvkov vektora rezíduí $\boldsymbol{\varepsilon}$. Prakticky je odhad vypočítaný pomocou vzťahu 
+\[
+\hat\beta=\left(\mathbf{X}^T\cdot\mathbf{X}\right)^{-1}\cdot \mathbf{X}^T\cdot\mathbf{y}.
+\]
+V prípade hmotnosti a zdvihového objemu 
+```{r}
+dat <- mtcars[c("wt", "disp")]
+X <- cbind(1, dat$wt)
+y <- dat$disp
+beta <- solve(t(X) %*% X) %*% t(X) %*% y 
+c( beta )
+```
+dostávame odhad regresnej priamky v tvare $Y = `r round(beta[1,],1)` + `r round(beta[2,],2)` X$, ktorá aj podľa obrázku dobre korešponduje s pozorovaniami. 
+```{r}
+plot(disp ~ wt, dat)
+abline(coef = beta, lwd=2, col=4)
+legend("bottomright", legend=c("data", "model"), pch=c(1,NA), lty=c(0,1), col=c(1,4))
+```
+
+Pozorovania však predstavujú náhodný výber zo základného súboru. Za iných podmienok (iná vzorka modelov áut) by pozorované hmotnosti a objemy mali iné hodnoty a odhad parametrov regresnej priamky by sa zmenil tiež. Keďže v štatistike ide o matematický popis predovšetkým základného súboru, určuje sa okrem bodového odhadu aj ten intervalový. To je interval, v ktorom sa s určitou pravdepodobnosťou (najčastejšie 0.95) nachádza skutočná hodnota parametra (získateľná iba z celého základného súboru). Interval spoľahlivosti sa dá odhadnúť niekoľkými spôsobmi. Ak je splnený predpoklad normality rezíduí $\varepsilon_i$, konštruuje sa symetricky okolo bodového odhadu pomocou t-rozdelenia. Iný prístup predstavuje metóda bootstrap - nie je viazaná normalitou, no je náročnejšia na výkon počítača. Postup je nasledovný: 
+
+1. zo súboru všetkých pozorovaní dĺžky $n$ sa náhodne vyberie $N$ vzoriek dĺžky $n$ (s opakovaním),
+2. pre každú vzorku sa odhadnú parametre regresnej priamky, takže vo výsledku bude $N$  dvojíc odhadov (priesečník a sklon priamky),
+3. z $N$ realizácií parametra sa vyberie jeho 2.5% a 97.5%-kvantil, ktoré tvoria hranice 95% intervalu spoľahlivosti.
+
+Počet opakovaní $N$ sa bežne volí v tisícoch, preto neoptimalizovaný výpočet môže v prípade zložitejších modelov trvať minúty až hodiny. Keďže odhad parametrov je jednoduchým problémom lineárnej algebry, ale v simulácii opakovaný veľmi veľa krát, je bootstrap metóda ideálna na implementáciu v kompilovanom jazyku.
+
+Začneme definíciou funkcie. Opäť by sa dala použiť funkcia *cppFunction*, tentokrát aj s argumentom `depends = "RcppArmadillo"`. Komplikovanejší kód je však výhodnejšie písať do oddeleného súboru s príponou *.cpp* a potom načítať pomocou funkcie *sourceCpp*. Jednak sa tým využije schopnosť editoru zvýrazniť syntax, jednak sa ľahšie identifikuje chyba podľa čísla riadku. V našej ukážke bude obsah súboru reprezentovať reťazec v argumente *code*.
+```{r}
+Rcpp::sourceCpp(code = "
+#include <RcppArmadillo.h>
+// [[Rcpp::depends(RcppArmadillo)]]
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+arma::mat multiodhadLM_C(NumericMatrix dat, int N) {
+  int n = dat.nrow();
+  arma::mat paraM(2,N); 
+  arma::colvec unit = arma::ones(n,1);
+  arma::mat Y = as<arma::mat>(dat);
+  arma::mat X;
+  arma::uvec i;
+  arma::uvec j01 = {0, 1};
+  for (int k = 0; k < N; k++) {
+    i = as<arma::uvec>(sample(n, n, true)) - 1;
+    arma::mat Ys = Y.submat(i,j01);
+    X = arma::join_horiz(unit, Ys.col(0));
+    paraM.col(k) = arma::solve(X.t() * X, X.t() * Ys.col(1));
+  }
+  return paraM;
+}
+")
+```
+Prvý riadok kódu jazyka C sprístupňuje triedy a funkcie definované v knižnici *RcppArmadillo*. Druhý riadok indikuje kompilátoru závislosť na balíku *RcppArmadillo* (žiaľ oba riadky sú potrebné). Ak by chýbal príkaz v treťom riadku, názvy všetkých použitých objektov z balíku *Rcpp* by museli obsahovať predponu (prefix) svojej príslušnosti, napríklad `Rcpp::NumericMatrix`.  To sa nevzťahuje na príkazy za reťazcom `//`, ktorý kompilátoru jazyka C indikuje, že v riadku nasleduje komentár. Preto príkaz na export funkcie do prostredia R, `// [[Rcpp::export]]`, musí obsahovať predponu.  
+Samotná funkcia čaká na vstupe maticové pole dátového typu z Rcpp (pozorované údaje) a prirodzené číslo (počtu simulácií), naopak vráti maticové pole typu Armadillo. Konverzia medzi R a C++ je ošetrená automaticky, v C++ však s ich rozdielnosťou treba počítať. Keďže z knižnice Armadillo potrebujeme užitočné funkcie *join_horiz* (analógia *rbind* v R), *ones* (pole vyplní jednotkami) či *solve*, a metódy *.nrow* (počet riadkov), *.submat* (časť matice), *.col* (stĺpec matice), *.t* (transponovanie), je nutné konvertovať maticu triedy Rcpp do triedy knižnice Armadillo (*arma*) pomocou funkcie *as<arma::mat>*. Vektor typu *uvec* slúži pre uloženie prirodzených čísel (unsigned int) akými sú tu indexy.
+
+V jazyku R by funkcia *multiodhadLM_C* bola jednoduchšia (netreba deklarovať typ premenných),
+```{r}
+multiodhadLM_R <- function(dat, N) {
+  n <- nrow(dat)
+  paraM <- matrix(nrow = 2, ncol = N)
+  for(k in 1:N) {
+    i <- sample(n, n, replace=TRUE)
+    Ys <- dat[i,]
+    X <- cbind(1, Ys[,1])
+    paraM[,k] <- solve(t(X) %*% X) %*% t(X) %*% Ys[,2]
+  }
+}
+```
+ale aj približne 15-krát pomalšia (použitie *for* cyklu namiesto *sapply* má iba minimálny vplyv).
+```{r results='hold'}
+system.time(
+  sim <- multiodhadLM_C(as.matrix(dat), 5000) 
+)
+system.time(
+  multiodhadLM_R(as.matrix(dat), 5000) 
+)
+sim[,1:5]  # prvých 5 dvojíc
+```
+Z výslednej matice *sim* rozmeru $2\times N$ už stačí len vypočítať požadovaný súhrn.
+```{r}
+suhrn <- apply(sim, 1, function(x) 
+  c(mean = mean(x), median = median(x), quantile(x, c(0.025, 0.975)))
+  )
+suhrn
+```
+Prirodzene, stredná hodnota i medián sú blízke odhadom z pôvodného výberu *dat*, skutočná hodnota parametrov základného súboru však s vysokou pravdepodobnosťou môže ležať kdekoľvek v rozsahu 
+$a\in`r paste0("(", paste0(round(suhrn[c("2.5%","97.5%"),1],2),collapse=","),")")`$, 
+$b\in`r paste0("(", paste0(round(suhrn[c("2.5%","97.5%"),2],2),collapse=","),")")`$.
+Najlepšie to ilustruje graf, ktorý okrem pôvodného odhadu regresnej priamky zobrazuje aj jej bootstrap simulácie.
+```{r}
+plot(disp ~ wt, dat, type="n")  # prázdny graf
+for(i in 1:1000) abline(coef = sim[,i], col = "grey")  # stačí zobraziť len 1000
+points(disp ~ wt, dat)  # zobrazenie až po simuláciách kvôli prekrytu
+abline(coef = beta, lwd = 2, col = "blue")
+legend("bottomright", legend=c("data", "model", "simulácie"), 
+       pch=c(1,NA, NA), lty=c(0,1,1), col=c(1,4,8)
+       )
+```
+
+
+
+
+
+
+
+## Práca s veľkými tabuľkami - databázy
+
+Pri transformácii údajov sme si ukázali, aký skvelý nástroj má systém R v balíku *dplyr*. Až do tejto chvíle sme vždy pracovali s dátovými súbormi, ktoré sa v pohode zmestili do pamäte bežného osobného počítača. Celkom pochopiteľne je R-ko ako analytický nástroj schopný pracovať aj s oveľa väčším objemom údajov, tie sú však už uložené v relačných databázach. Je to súhrn údajov uchovávaný v navzájom prepojených tabuľkách. Získavať údaje z databáz je možné pomocou dopytovacieho jazyka (napr. SQL), počítačový program na ich správu a tvorbu dopytov sa nazýva systém riadenia bázy údajov (napr. SQLite, PostgreSQL, MySQL, MariaDB, Oracle, Microsoft Access). Databázovým systémom sa zvykne súhrnne označovať databáza a systém jej riadenia.
+
+V tejto podkapitole si krátko priblížime jazyk SQL a na ilustračnej databáze ukážeme prístup k záznamom z prostredia R [@finley2020r, kapitola 13 Databases and R].
+
+### SQL
+
+Každá tabuľka relačnej databázy pozostáva zo stĺpcov (polia) a riadkov (záznamy) -- podobne ako data frame v R, kde stĺpce nazývame premennými a riadky pozorovaniami. Tabuľky sú spravidla tematicky zamerané, majú však spoločné _kľúčové_ pole, pomocou ktorého je možné prepojiť záznamy v jednotlivých tabuľkách, napr. v databáze študentov by jedna tabuľka obsahovala kontaktné údaje (nazvime ju "kontakty"), druhá študijné výsledky z jednotlivých predmetov ("známky") a kľúčovým poľom v každej z nich by bolo identifikačné číslo študenta. Takto konkrétnemu študentovi môžeme napr. zaslať jeho známky.
+
+Syntax jazyka SQL je podobná ako syntax prirodzeného jazyka, typický príkaz má tvar súvetia: hlavná, rozkazovacia veta začína prísudkom, pokračuje predmetom a ďalšie členy, resp. vedľajšie vety vyjadrujú sériu podmienok. Napr. požiadavka
+```{sql eval=F}
+SELECT email FROM kontakty WHERE id = '007'
+```
+vyberie všetky záznamy z pola _email_ v tabuľke _kontakty_, ktoré spĺňajú podmienku identifikačného čísla rovného hodnote _007_. Zložitejšie požiadavky obsahujú logické spojky _AND_, prepojovací príkaz _JOIN_ alebo zoskupovanie podľa hodnôt konkrétneho poľa _GROUP BY_, okrem toho možno prvky z databázy nielen vyberať ale aj vkladať, modifikovať či odstraňovať (_INSERT_, _UPDATE_, _DELETE_) a [mnoho ďalšieho](www.sqltutorial.org).
+
+### Prístup z R
+
+Práca s veľkými súbormi údajov v R prináša množstvo ťažkostí, úzke premostenie medzi prostredím a databázovým systémom bráni narábať s dátami rovnako rýchlo ako s lokálnymi objektami typu data frame. Historicky sa to riešilo dvoma spôsobmi, jedným sa dáta do lokálnej pamäte sťahovali po menších častiach, druhým sa sťahoval celý súbor naraz, ani jedno riešenie nie je ideálne, pretože poskytujú iba čiastkový obraz o dátach, alebo spomaľujú analýzu, nehovoriac o potrebe sťahovať dáta pri každej aktualizácii databázy a zahlteniu pamäte počítača. Hlavný problém oboch prístupov je, že sa snažia manipuláciu s databázou vykonať lokálne. Efektívnejším riešením by však bolo prinútiť systém R zaslať SQL požiadavku databázovému systému, ktorý vráti data frame vhodný pre ďalšiu analýzu, ideálne bez toho, aby sme sa museli SQL sami učiť. Jedným takým nástrojom je už dobre známy balík *dplyr*, ktorý umožňuje manipulovať so vzdialenými databázami rovnako ako s dátovým rámcom. 
+
+Ukážeme si to na príklade a použijeme pri tom jednoduchý a voľne šíriteľný databázový systém *SQLite* vhodný aj pre domáce použitie, pretože nevyžaduje samostatný beh servera, databáza je uložená v jedinom súbore a prístup ku nemu zabezpečuje malý program[^sqlite]. Napriek svojej jednoduchosti dokáže SQLite zabezpečiť manipuláciu s mnohými GB údajov, funguje na ňom väčšina webových stránok, na väčšie projekty však nestačí, neumožňuje napr. prácu so skupinami (to čo v *dplyr* poznáme ako *group_by*), na serióznejšie úlohy sa odporúča napr. (rovnako voľne šíriteľný) PostgreSQL, ktorý však už musí bežať na serveri (hoci aj lokálne na PC) a teda vyžaduje jeho konfiguráciu. Aby Rko dokázalo komunikovať s databázovými systémami, je potrebný balík *DBI*, ovládač ku konkrétnemu systému SQLite zabezpečuje balík *RSQLite* a mozaiku medzičlánkov ku nástrojom *dplyr* dopĺňa balík *dbplyr*. Podrobnejšie informácie o integrácii databáz v R aj v RStudio sú na stránke https://db.rstudio.com. 
+
+[^sqlite]: Nástroje SQLite sú v operačnom systém MacOS predinštalované, OS Linux ich má v repozitároch jednotlivých distribúcií, jedine pre OS Windows ich je potrebné stiahnuť. Na stránke https://www.sqlitetutorial.net/download-install-sqlite/ sa nachádza jednoduchý návod aj s odkazom na grafické používateľské prostredia.
+
+V príklade použijeme voľne dostupnú ilustračnú databázu *chinook*, ktorú stačí stiahnuť zo stránky https://www.sqlitetutorial.net/sqlite-sample-database/ do pracovného adresára. Prvým krokom je vytvorenie **spojenia** s databázovým systémom (systém riadenia + databáza) a zobrazenie zoznamu tabuliek.
+
+```{r}
+chinook <- DBI::dbConnect(drv = RSQLite::SQLite(), dbname = "data/chinook.db")
+DBI::dbListTables(chinook)
+```
+Chinook[^chinook] je databáza fiktívneho digitálneho obchodu s hudbou obsahujúca informácie o umelcoch, albumoch, piesňach, zamestnancoch obchodu, zákazníkoch a faktúrach za obdobie 4 rokov. Vezmime si napríklad tabuľku o zamestnancoch.
+
+[^chinook]: Databáza je alternatívou ku staršej ilustračnej databáze *Northwind*, názov *chinook* odkazuje na vetry vo vnútrozemí západu Severnej Ameriky.
+
+```{r}
+employees <- dplyr::tbl(src = chinook, from = "Employee")
+employees
+```
+
+
+Vyzerá takmer ako tabuľka formátu *tibble*, iba obsahuje navyše meta-informácie o databáze. Podobne pohodlne sa s ňou pomocou *dplyr* aj robí.
+```{r}
+salesSupportAgents <- employees %>% 
+  dplyr::filter(Title == "Sales Support Agent") %>% 
+  dplyr::select(LastName, FirstName, Phone, Email) %>% 
+  dplyr::arrange(LastName)
+salesSupportAgents
+```
+SQL požiadavku, ktorá bola pri tom na pozadí zaslaná databázovému systému, si môžme zobraziť
+```{r}
+dplyr::show_query(salesSupportAgents)
+```
+ale kľudne akúkoľvek SQL požiadavku aj poslať priamo.
+```{r, eval=FALSE}
+DBI::dbGetQuery(chinook, '
+  SELECT "LastName", "FirstName", "Phone", "Email"
+  FROM "Employee"
+  WHERE "Title" = "Sales Support Agent"
+  ORDER BY "LastName"
+')
+```
+
+Objekty `chinook`, `employees` a `salesSupportAgents` sú stále iba spojenia, i keď sa vďaka výpisu tvária ako dátové objekty. Presvedčíme sa o tom napr. požiadavkou na zistenie počtu riadkov.  
+```{r}
+salesSupportAgents %>% nrow()
+```
+Výber z databázy sa však do lokálneho dátového objektu dá uložiť, len si treba vopred overiť, či objem sťahovaných dát zodpovedá našej predstave, rýchlosti pripojenia a hardvéru lokálneho počitača.
+```{r}
+salesSupportAgents %>% dplyr::summarise(n())
+salesSupportAgents %>% dplyr::collect()
+```
+Prvým príkazom bola do databázy zaslaná SQL požiadavka na počet riadkov. V tomto prípade teda ide iba o malú tabuľku, ktorá sa druhým príkazom stiahla okamžite.
+
+Podobne ako pri zisťovaní počtu riadkov, ani zobrazenie údajov v databáze pomocou *ggplot2* nejde vykonať priamo, dá sa však použiť balík *dbplot* ktorý potrebné výpočty urobí na strane databázového systému a výsledok vykreslí lokálne.
+```{r}
+employees %>% 
+  dbplot::dbplot_bar(x = Title) +
+  ggplot2::labs(title = "Pozície zamestnancov") + 
+  ggplot2::ylab("Počet") + 
+  ggplot2::theme_classic()
+```
+
+Chinook je relačná databáza, tabuľky navzájom súvisia, napríklad tabuľka "Album" v každom zázname obsahuje aj ID umelca "ArtistId", toto pole je pochopiteľne prítomné aj v tabuľke "Artist" a prepája obe tabuľky, preto sa nazýva kľúčové a využijeme ho na vypísanie všetkých ponúkaných albumov skupiny "R.E.M.". Na to je potrebné obe tabuľky najprv zlúčiť. V balíku *dlyr* na to slúži niekoľko funkcií s príponou *_join* a predponami *inner*, *left*, *right* a *full*, ktoré sa líšia tým, ako riešia prítomnosť implicitne chýbajúcich hodnôt v kľúčovom poli prvej (ľavej) a druhej (pravej) tabuľky -- teda tých záznamov, ktoré sa nachádzajú iba v jednej tabuľke. Detailne o tom píše [@wickham2016r, kapitola 13 Relational data ].
+```{r}
+dplyr::tbl(src = chinook, from = "Artist") %>% 
+  dplyr::filter(Name == "R.E.M.") %>% 
+  dplyr::inner_join(y = dplyr::tbl(src = chinook, from = "Album"),   # alebo left_join
+                    by = "ArtistId") 
+```
+
+
+Po skončení práce s databázovým systémom je potrebné databázu odpojiť.
+```{r}
+DBI::dbDisconnect(chinook)
+```
+
+### Vytvorenie databázy
+
+Videli sme, že balík *dplyr* je dobrý nástroj na získanie údajov z databázy, veľmi sa však nehodí na jej modifikáciu, teda vkladanie a odstraňovanie záznamov z databázy. Zapisovanie tabuliek do databázy (novej či existujúcej) je možné iba z  existujúceho objektu v prostredí R.
+
+```{r eval=FALSE}
+con <- DBI::dbConnect(drv = RSQLite::SQLite(), dbname = "data/mtcars.db")
+```
+```{r include=FALSE}
+# aby nebolo treba skladovať mtcars.db kvôli učebnici
+con <- DBI::dbConnect(drv = RSQLite::SQLite(), dbname = ":memory:")
+con@dbname <- paste0(getwd(),"data/mtcars.db")
+```
+```{r}
+dplyr::copy_to(dest = con, df = mtcars, name = "mtcars", temporary = FALSE, overwrite = T)
+dplyr::tbl(src = con, from = "mtcars") %>% head()
+```
+
+
+
+Databázové systémy však majú zmysel práve vtedy, keď náš súbor údajov je priveľký na to, aby sa zmestil do voľnej pamäte RAM (alebo je práca s ním pomalá), teda keď zaberá miesto rádovo v jednotkách, desiatkach či stovkách GB. Taký súbor je potom potrebné dostať do databázy buď po častiach, alebo priamo z textového .csv súboru uloženom na pevnom disku. Ukážeme si druhý spôsob, treba však súbor pripraviť/upraviť tak, aby desatinné miesta v numerických hodnotách oddeľoval znak `.` (bodka, nie čiarka), a počet prvkov v hlavičkovom riadku zodpovedal počtom prvkov v ostatných riadkoch. Funkcia DBI::dbWriteTable automaticky určí správny formát jednotlivých polí, no umožňuje ho zadať aj manuálne.
+```{r eval=FALSE}
+# príprava ilustračného súboru
+mtcars %>% 
+  tibble::rownames_to_column(var = "model") %>%
+  write.table(file = "data/mtcars.csv", sep = ",", row.names = FALSE)
+# zápis súboru do tabuľky databázy
+DBI::dbWriteTable(conn = con, name = "mtcars", value = "data/mtcars.csv",
+                  overwrite = TRUE, skip = 0, sep = ",")
+#odpojenie databázy
+DBI::dbDisconnect(con)
+```
+```{r include=FALSE}
+DBI::dbDisconnect(con)
+```
+
+Najviac možností importu dávajú pochopiteľne priamo nástroje systému SQLite, pre bežného používateľa je najjednoduchšie použiť niektorý z grafických prostredí ako napr. SQLite Browser alebo SQLite Studio. 
+
+
+
+
+## Cvičenie {#efektivne-cvicenie}
+
+1. Paralelizujte odhad intervalu spoľahlivosti parametrov regresnej priamky z tretej podkapitoly. 
+2. Funkciu *sort_C* z tretej kapitoly umiestnite do súboru s príponou *.cpp*, použite v ďalšej funkcii na výpočet mediánu a obe nastavte tak, aby boli viditeľné po načítaní funkciou *sourceCpp*. Ich funkčnosť vyskúšajte v R. Ako by ste si výpočet mediánu  uľahčili s pomocou hotových funkcií v štandardnej knižnici *std* alebo pomocou tzv. *sugar* funkcií z *Rcpp*?
+3. Z balíku *nycflights13* uložte všetky dátové rámce, ktoré sú potrebné na dokončenie tejto úlohy, do textových súborov vo formáte .csv a tieto importujte do SQLite databázy uloženej v súbore "nycflights13.db" do zodpovedajúcich tabuliek (import si vyskúšajte aj v externom programe - čím sa bude líšiť ďalší postup?). Vytvorte nové spojenie, a pomocou príkazov nad touto databázou (dáta sa nesmú nachádzať v objekte prostredia R) v histograme zobrazte prehľad kapacity lietadiel, ktoré 1.1.2013 vzlietli v ranných hodinách z New Yorku.
+4. Ako by ste charakterizovali svoj štýl programovania, v čom sa líši od odporúčaní komunity napr. okolo ekosystému _tidyverse_?
+
+
+
+
+
+## Referencie

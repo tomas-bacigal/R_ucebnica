@@ -1,0 +1,228 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  out.width = '70%',
+  fig.align = 'center'
+)
+```
+
+# Základné nástroje na prieskumnú analýzu údajov
+
+Hlavným cieľom data science je pochopiť mechanizmus, ktorý generuje pozorované údaje. Prvým na to používaným nástrojom je prieskumná analýza údajov, ktorou nazrieme do povahy hromadných javov (prírodný alebo spoločenský jav, ktorý sa skúma na veľkom počte prípadov) pomocou vlastností skúmaných objektov. Pretože hromadný jav sa skladá z množstva individuálnych javov, tieto vlastnosti nadobúdajú svoje hodnoty náhodne a v štatistike sa nazývajú *náhodné premenné* (prípadne náhodné veličiny) a každá hodnota náhodnej premennej môže nastať s určitou pravdepodobnosťou. Náhodnosť premenných je charakterizovaná tzv. rozdelením pravdepodobnosti, či už prostredníctvom pravdepodobnostnej funkcie resp. hustoty, alebo distribučnej funkcie. Napr. ak hromadným javom je fyzický stav obyvateľstva, náhodnou premennou je napr. výška človeka, ktorá môže nadobudnúť hodnoty od niekoľkých centimetrov až po vyše dvoch metrov (formálne od 0 po nekonečno), pričom hustota pravdepodobnosti okolo strednej hodnoty je vyššia ako hustota výskytu nízkych či naopak vysokých ľudí. Graf hustoty tak má typicky zvonovitý tvar, zatiaľčo distribučná funkcia (postupná kumulácia pravdepodobností) má tvar písmena *S* s najväčším stúpaním okolo strednej hodnoty.  
+
+Prieskumná analýza potom pomáha odhaľovať tvar rozdelenia pravdepodobnosti jednotlivých skúmaných veličín aj vzťahy medzi nimi. Cieľom aktuálnej kapitoly je ukázať základné vizuálne nástroje prostredia R používaných na tento účel. Pri jej príprave bola použitá najmä literatúra [@pearson2018exploratory, kapitola 3] a [@peng2016exploratory, kapitoly 5 až 7].
+ 
+## Príprava údajov 
+ 
+Import (*read.table*) a "krájanie" údajov (*subset*) sme si predstavili v úvode do jazyka R. Zatiaľ predpokladáme, že naše dáta sú uložené v ideálnej forme, teda premenné (veličiny) v stĺpcoch a pozorovania (namerané hodnoty) v riadkoch. 
+ 
+Prvým pohľadom na tabuľku údajov je identifikácia typu premenných, teda či sú numerické a spojito nadobúdajú hodnoty z nejakého intervalu, alebo sú diskrétne a obsahujú buď číselné alebo znakové hodnoty.
+
+```{r }
+data(mtcars)   
+head(mtcars,1)   # detailný popis datasetu na https://rpubs.com/neros/61800
+str(mtcars)
+```
+
+Všetky premenné majú číselné hodnoty, no nie všetky v spojitej mierke, konkrétne počet cylindrov (*cyl*), uloženie valcov (*vs*), typ prevodovky (*am*), počet rýchlostných stupňov a počet logických karburátorov (*carb*) sú diskrétne premenné. Niektoré z nich pre lepšiu zrozumiteľnosť prekódujeme z numerických na znakové/slovné, a všetky stĺpce ordinálnych diskrétnych premenných prevedieme na faktory (teda tam, kde záleží na poradí hodnôt). 
+
+```{r }
+mtcars$am <- ifelse(mtcars$am == 0, 
+                    yes = "automatic", 
+                    no = "manual")  # vhodné pri malom počte úrovní
+mtcars$vs <- sapply(mtcars$vs+1, switch, "Vshaped", "Straight") 
+# elegantnejsie car::recode(mtcars$vs, "0='Vshaped'; 1='Straight'")
+for (i in c("cyl","gear", "carb")) {
+  mtcars[[i]] <- factor(mtcars[[i]], levels = sort(unique(mtcars[[i]])), ordered=T)
+} 
+str(mtcars)
+```
+
+Interná reprezentácia znakového vektora ako dátový typ factor už nemá taký zmysel (pre úspornejšie uloženie údajov) ako kedysi, no prekódovanie diskrétnych numerických na znakové (či už faktorové alebo nie) má zmysel jednak pri zobrazovaní, jednak pri modelovaní (intuitívne, kvalitatívny rozdiel medzi 4 a 6 valcovými motormi nemusí byť rovnaký ako 6 a 8 valcovými) a to aj kvôli vylúčeniu hodnôt, ktoré sa v praxi nevyskytujú, alebo nie sú zahrnuté do experimentu (napr. 5 valcov).  
+V rámci data wrangling  by sme mohli ešte transformovať premenné v imperiálnych jednotkách do metrickej sústavy SI.  
+Pre lepšiu čitateľnosť zmeníme názvy premenných: 
+
+```{r }
+names(mtcars) <- c("reach_mpg", "cylinders", "displacement", "horsepower", 
+                   "axle_ratio", "weight", "accel_time", "cyl_config", 
+                   "transmission", "gears", "carburetors")
+```
+
+## Vyšetrenie jednorozmerného rozdelenia pravdepodobnosti
+
+Druhým krokom exploračnej analýzy je vyšetrenie rozdelenia pravdepodobnosti pre každú premennú jednotlivo. 
+
+```{r }
+# extrémy, kvartily a stredná hodnota, alebo tabuľka početnosti, pripadne počet NA
+summary(mtcars)  
+```
+
+Príslovie "lepšie raz vidieť ako 100-krát počuť" platí v malej obmene aj pri prieskumnej analýze v zmysle, že ľahšie pochopíme chovanie (rozdelenie) náhodnej premennej z vhodného grafu než z množstva číselných reprezentácií.  
+Vezmime si najprv spojitú kvantitatívnu premennú, napr. výkon motora *horsepower*. Jedným z najčastejšie používaným grafom na zobrazenie rozdelenia je krabicový graf (box-and-whiskers), ktorý ukazuje 5 súhrnných čísel (Tuckey's five numbers) z výpisu funkcie summary, avšak iniciatívne oddeľuje odľahlé hodnoty (outliers) ak prekročia vzdialenosť 1.5*(q75-q25) od horného a dolného kvartilu. 
+
+```{r }
+summary(mtcars$horsepower)
+boxplot(mtcars$horsepower)
+```
+
+Hrubá čiara predstavuje medián, hranice obdĺžnika sú kvartily, 'fúzy' sú vlastné extrémne hodnoty a disktrétne body na grafe zastupujú odľahlé hodnoty, v našom prípade je iba jeden.   
+Ďalším často používaným grafom (použiteľným aj pre nominálne premenné) je histogram.
+
+```{r }
+table(cut(mtcars$horsepower, breaks = seq(50,350,by=50)))
+hist(mtcars$horsepower)   # alebo car::truehist(mtcars$horsepower, prob=F)
+```
+
+Je to prakticky vizualizácia tabuľky početnosti, výška stĺpcov zodpovedá počtu výskytov (frequency) jednotlivých skupín hodnôt (bins). Vyhladením histogramu dostávame trochu lepší obraz o tzv. hustote rozdelenia spojitých náh.premenných a podobnú službu nám urobí aj zovšeobecnenie krabicového grafu, tzv. husľový (violin) graf. Oba sa dajú doplniť tzv. kobercovým (rug) grafom.
+
+```{r }
+old <- par(mfrow=c(1,2))
+
+hist(mtcars$horsepower, prob=TRUE)
+rug(mtcars$horsepower)
+lines(density(mtcars$horsepower), lwd=2)
+
+vioplot::vioplot(mtcars$horsepower)
+rug(mtcars$horsepower, side=2)
+
+par(old)
+```
+
+Na zobrazenie rozdelenia diskrétnej premennej, napr. *cylinders*, použijeme stĺpcový graf
+
+```{r }
+table(mtcars$cylinders)
+barplot(table(mtcars$cylinders))
+```
+
+
+
+## Vzťahy medzi premennými
+
+Najčastejší nástroj pre zobrazenie vzťahu **dvoch spojitých** náhodných premenných je XY graf (scatter plot).
+
+```{r }
+plot(horsepower ~ displacement, data=mtcars)
+```
+
+Z grafu vidno, že výkon motora značne súvisí so zdvihovým objemom. Jedno z áut je výrazne efektívne vo využití objemu valcov, že by to súviselo s počtom valcov? Pozrime, o ktoré auto ide.
+
+```{r }
+mtcars[which.max(mtcars$horsepower),]
+```
+
+Zjavne ide o 8-valec, pozrime teda ešte na ostatné 8-valcové modely a pre lepší prehľad zoraďme podľa výkonu. 
+
+```{r }
+tmp <- subset(mtcars, subset = cylinders == "8")  
+tmp[order(tmp$horsepower, decreasing = T),]
+```
+
+S polu s druhým najvýkonnejším má manuálnu prevodovku, 5 rýchlostných stupňov a pomerne nízku hmotnosť. Zobraziť vzťah viac než dvoch premenných priamym pridávaním rozmerov (3D, video?) by bolo neefektívneje, existujú aj lacnejšie triky, napr. pomocou farby, veľkosti a tvaru bodov.
+
+```{r }
+plot(horsepower ~ displacement, data=mtcars, 
+     col = as.integer(mtcars$cylinders), 
+     pch = as.integer(as.factor(mtcars$transmission))
+)
+legend("topleft", legend = c(4,6,8), pch = 1, col = 1:3, title = "cylinders")
+legend("bottomright", legend = sort(unique(mtcars$transmission)), pch = 1:2, title="transmission")
+```
+
+Podobne možno použiť tzv. bublinový graf (bubble plot) na vyjadrenie závislosti napr. medzi výkonom motora a dojazdom v závislosti od počtu valcov a ešte aj doplniť popis
+
+```{r }
+symbols(x = mtcars$horsepower, y = mtcars$reach_mpg, 
+        circles = as.numeric(mtcars$cylinders),
+        inches = 0.25)
+text(x = mtcars$horsepower, y = mtcars$reach_mpg, 
+     mtcars$cylinders)
+```
+
+Tento graf je vhodný v prípadoch, kedy podmieňujúca premenná (*cylinders*) je ordinálna a body nie sú príliš nahusto (čo asi nie je tento prípad.  
+
+Závislosť **diskrétnej a spojitej** premennej sa štandardne zobrazuje krabicovými grafmi u ktorých šírka môže reflektovať napr. počet pozorovaní:
+
+```{r }
+sapply(split(mtcars$horsepower, mtcars$cylinders), summary)
+boxplot(horsepower ~ cylinders, data=mtcars, varwidth=T)  # s faktormi aj pomocou plot()
+
+boxplot(horsepower ~ cylinders, data = mtcars, varwidth = T, cex = 0)
+stripchart(horsepower ~ cylinders, data = mtcars, 
+           add = T, vertical = TRUE, method = "jitter", pch = 16)
+
+vioplot::vioplot(horsepower ~ cylinders, data = mtcars)
+```
+
+Nárast výkonu u 6 valcových motorov nie je tak zásadný ako u 8 valcových.  
+
+**Dve diskrétne** premenné možno zobraziť mozaikovým grafom, ktorý v plošnej miere vyjadruje početnosti v prienikoch jednotlivých kategórií.
+
+```{r }
+with(mtcars, table(transmission, gears))
+mosaicplot(transmission ~ gears, data = mtcars)
+```
+
+Z toho vidno nielen vyššiu celkovú početnosť automobilov s automatickou prevodovkou ale hlavne negatívnu závislosť oboch veličín (automaty ešte nezvládali veľa prevodov).  
+Alternatívne pomocou stĺpcového grafu
+
+```{r }
+barplot(table(mtcars$transmission, mtcars$gears), 
+        beside = T, legend.text = T, args.legend = list(title='transmission'), 
+        xlab = "gears", ylab = "frequency")
+```
+
+**Viac numerických** premenných - každá s každou, s farebným rozlíšením podľa jednej diskrétnej premennej.
+
+```{r }
+pairs(~ reach_mpg + displacement + horsepower + weight, data = mtcars,
+      col = c("red","green3","blue")[mtcars$cylinders],
+      lower.panel = NULL
+      )
+```
+
+Skupina panelov (v hornom/dolnom trojuholníku a na diagonále) sa dá definovať samostatne, no ľahšie je použiť už pripravené funkcie, napr.
+
+```{r }
+psych::pairs.panels(mtcars[c("reach_mpg", "displacement", "horsepower", "weight")],
+                    ellipses=F, smooth=T, smoother=T,  # prepínače pre dolný trojuholník 
+                    density = T, rug = T,   # diagonálu
+                    cor = T, cex.cor = 0.8,  # horný trojuholník  
+                    )
+```
+
+Rozostrenie (smoother) je výhodné pri zobrazení väčšieho množstva údajov, keď by už značky jednotlivých bodov splývali. Vyhladzujúca krivka (smooth) zjednodušuje vývoj závislosti medzi oboma premennými. Číslo v hornom trojuholníku je korelačný koeficient vyjadrujúci na intervale (-1,1) silu závislosti so špeciálnymi prípadmi: -1 nepriama úmernosť, 0 nekorelovanosť, +1 priama úmernosť. Pre úplnosť, korelačná matica sa vypočíta pomocou 
+
+```{r }
+cor( mtcars[c("reach_mpg", "displacement", "horsepower", "weight")] )
+```
+
+ 
+ 
+Pozn. Každý z predstavených grafov je možné pomocou argumentu *subset* jednoducho aplikovať aj na podmnožinu pozorovaní, napr.
+
+```{r }
+mosaicplot(transmission ~ gears, data=mtcars, subset = weight<3.0)
+```
+
+z ktorého je zjavná prevaha 4-rýchlostných manuálnych prevodoviek v triede ľahších automobilov. Pridanie ďalších diskrétnych premenných uľahčí napr. balík *vcd* (Visualizing Categorical Data).
+
+Pozn.: Dobrá zásada pri konštrukcii grafov je, aby neplytvali miestom, teda neobsahovali príliš málo informácii, ale ani nimi nezahlcovali. Nevhodné je používať efekty, ktoré sťažujú čitateľnosť informácie ako napr. perspektíva v pseudo 3D grafoch (špecialita programu MS Excel), alebo početnosť vyjadrená veľkosťou uhla v koláčovom grafe
+
+```{r }
+pie(table(mtcars$carburetors), main = "Number of carburetors proportions")
+```
+
+Zásady, ako nerobiť zlé grafy sú zhrnuté napr. v [@izarry2016data, kapitola Exploratory Data Analysis].
+
+Pozn.: Pomoc pri zorientovaní sa, aký graf použiť v závislosti od typu a počtu náhodných premenných, poskytne napr. projekt *from Data to Viz* na stránke https://www.data-to-viz.com/.
+ 
+
+## Cvičenie {#zakladne-cvicenie}
+
+1. Načítajte data frame *Cars93* z balíka *MASS*, zoznámte sa s významom náhodných premenných (stĺpcov), zobrazte si ich číselný súhrn.
+2. Čo viete na základe vizualizácie povedať o rozdelení pravdepodobnosti ceny amerických vozidiel? Aká je ich priemerná a mediánová cena?
+3. Zobrazte zastúpenie jednotlivých výrobcov zoradené podľa veľkosti v stĺpcovom grafe (popisy kolmo na os), v koláčovom grafe a bodovom grafe (dotchart). Veľkosť znakov popisu osí prispôsobte početnosti hodnôt premennej. Ktorý graf je najprehľadnejší?
+4. Súvisí nejak cena s bezpečnostnou výbavou? 
+5. Ako ovplyvňuje pôvod výrobcu vzťah medzi objemom valcov a výkonom?
+6. Analyzujte dostupnosť manuálnej prevodovky v jednotlivých veľkostných triedach automobilov. (Je vhodné previesť triedy auta na dátový typ *factor* s poradím úrovní definovaným manuálne alebo napr. podľa priemernej hmotnosti.)

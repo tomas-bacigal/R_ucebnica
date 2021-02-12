@@ -1,0 +1,36 @@
+--- 
+title: "Úvod do analýzy údajov pomocou R"
+author: "Tomáš Bacigál"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+bibliography: [book.bib, packages.bib]
+biblio-style: apalike
+link-citations: yes
+description: "Základy jazyka R a úvod do Data Science: prieskumná analýza, transformácia údajov (dplyr),  vizualizácia (ggplot2), čistenie údajov (tidyr), interaktívne grafy (htmlwidgets, shiny, ...), komunikácia (RMarkdown), efektívne programovanie (parallel, RCpp, RSQLite)."
+github-repo: "tomas-bacigal/R_ucebnica"
+cover-image: "pic/Rlogo.png"
+lang: sk
+geometry: margin=2cm
+---
+
+# Predslov {-}
+
+> I don't think anyone actually believes that R is designed to make everyone happy. For me, R does about 99% of the things I need to do, but sadly, when I need to order a pizza, I still have to pick up the telephone. (R. Peng)
+
+Tento citát vystihuje univerzálnosť softvérového nástroja R^[V súčasnosti by už ani nebolo ťažké napísať balík pre R na vytvorenie a zaslanie objednávky do pizzerie.]. Tak ako u veľa open source projektov jeho najväčšou silou je široká komunita vývojárov a používateľov. Oficiálne je R označované ako programovací jazyk a prostredie pre štatistické výpočty a vizualizáciu údajov [@R-base] vyvíjané pod slobodnou licenciou od roku 1995. Patrí medzi prvú desiatku najpoužívanejších programovacích jazykov (podľa indexu [TIOBE](https://www.tiobe.com/tiobe-index/r/)) a jeho popularita stále rastie.  
+
+S "eRkom" (ako sa tento softvér v našich končinách familiárne nazýva) som sa stretol pred ukončením PhD štúdia v roku 2007. Dovtedy som na výpočty používal rôzne komerčné softvéry -- od Mathsoft Mathcad s pekným zobrazovaním vzorcov, cez tabuľkový Microsoft Excel, až po všestrannú Wolfram Mathematica. Odvtedy R-ko u mňa naberalo na priazni až sa stalo prakticky jediným softvérovým nástrojom seriózne používaným vo výskume, výučbe i analýzach na objednávku.  
+
+Dynamický vývoj v posledných rokoch z R-ka urobil výborný nástroj nielen na štatistickú analýzu údajov ale aj na publikovanie výsledkov v rôznych formách. Predkladaná učebnica predstavuje úvod do používania tohto nástroja v odbore populárne pomenovanom ako *Data Science*^[Data Science je interdisciplinárny odbor kombinujúci matematickú štatistiku, analýzu údajov a ďalšie oblasti snažiaci sa pochopiť javy okolo nás.], môže slúžiť ako prerekvizita pre výučbu matematickej štatistiky, analýzy časových radov, hĺbkovej analýzy údajov (data mining) či strojového učenia (machine learning) v prostredí R na vysokých školách, alebo ako úvod do analytického nástroja pre pracovníkov výskumných ústavov a komerčných inštitúcií. 
+
+Učebnica je v mnohých ohľadoch inšpirovaná publikáciou *R for Data Science* [@wickham2016r], z ktorej ťažiskové témy sú tu rozpracované a doplnené s pomocou ďalších zdrojov. Prvá kapitola sa venuje základom jazyka R, od matematických funkcií a operátorov cez manipuláciu s dátovými štruktúrami až po jednoduché programovacie prostriedky. Druhá kapitola už vovádza do sveta Data Science, ktorý ďalej približujú nasledujúce kapitoly, menovite prieskumnú analýzu tretia, transformáciu údajov štvrtá, vizualizáciu piata a čistenie údajov šiesta kapitola. Siedma kapitola rozširuje vizualizáciu údajov o interaktívne prvky, siedma je najrozsiahlejšia a otvára dvere k publikovaniu. Učebnicu uzatvárajú niektoré témy pokročilého programovania.
+
+Súčasťou každej kapitoly sú aj cvičenia, ktoré majú získané vedomosti nielen overiť, ale predovšetkým posilniť. Odpovede bez otázok sú ako stromy bez koreňov^[Tomáš Halík: *Patience with God: The Story of Zacchaeus Continuing In Us*], až pri riešení problémov sa človek skutočne učí a jeho poznanie rastie. Budem rád, keď správne riešenia úloh uvádzané na konci učebnice nebudú na prekážku poznaniu ale naopak, povzbudia čitateľa v nachádzaní vlastných správnych riešení.
+
+<br>
+
+[autor &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; ]{style="float:right"}
+
+<br>
+<br>

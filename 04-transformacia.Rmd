@@ -1,0 +1,141 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE
+)
+```
+
+# Transformácia údajov a súhrny pomocou *dplyr*
+ 
+V tejto kapitole preberieme moderné nástroje na manipuláciu so súbormi údajov (ktoré sú už v čistej tabuľkovej forme - viac o tom v ďalšej kapitole), informácie pochádzajú najmä z online verzií kníh [@wickham2016r, kapitola 5], [@ismay2019statistical, kapitola 3] a [@peng2016r, kapitola 13].
+
+
+## Všeobecne
+
+Základnou dátovou štruktúrou v R (kontajnerom na údaje) pre ďalšie štatistické spracovanie je *data.frame*, v ktorom každý riadok predstavuje jedno pozorovanie (meranie, záznam...) a každý stĺpec jednu premennú (veličinu, mieru, vlastnosť, charakteristiku, znak...). Ukázali sme si už základné nástroje na vytváranie a manipuláciu s dátovými rámcami ako napr. subsetting ($, [ ], subset), avšak iné operácie ako komplexnejšie filtrovanie (výber pozorovaní podľa zadaných kritérií), zoraďovanie či tvorenie súhrnov môžu byť trochu únavné a neprehľadné, syntax jazyka R totiž nie je veľmi intuitívna. Toto sa snaží odstrániť balík *dplyr* [@wickham2020dplyr], ktorý implementuje konzistentnú "gramatiku" (v súlade s názvoslovím databázového jazyka SQL - Structured Query Language) a je veľmi rýchly. Kľúčovými funkciami sú:
+
+- select - výber stĺpcov
+- filter - výber riadkov na základe logických podmienok
+- arrange - zoradenie riadkov
+- rename - premenovanie stĺpcov (premenných)
+- mutate - pridanie nových stĺpcov napr. transformáciou iných
+- summarise, summarize - generovanie podmienených súhrnov pre daný stĺpec
+
+- %>% - pipe operátor pre reťazenie príkazov (analógia skladania funkcií v matematike)
+
+Balík je súčasťou ekosystému *tidyverse* [@wickham2019welcome], čo je kolekcia balíkov navrhnutých pre data science a vychádzajúcich zo spoločnej filozofie, gramatiky a dátových štruktúr. Funkcie zdieľajú niekoľko spoločných vlastností:
+
+1. prvý argument je data frame,
+2. ďalšie argumenty špecifikujú, čo sa má s dátami z prvého argumentu urobiť, pričom na stĺpce stačí odkázať menom,
+3. výstupom je opäť data frame,
+4. dátové rámce musia byť riadne formátované, "čisté" (tidy)
+
+## Prakticky
+
+Balík pri načítaní predefinuje niektoré známe funkcie, preto je dobrým zvykom písať funkcie celým menom, napr. base::filter()
+
+```{r }
+library(dplyr)
+```
+
+
+Prvou kľúčovou funkciou je *select*, ktorou sa vyberá podmnožina stĺpcov. Z datasetu *mtcars* pre ilustráciu vyberme postupne stĺpce - najprv jednotlivo po mene, napr. dojazd, hmotnosť, potom všetky stĺpce začínajúce písmenom “c” okrem *carb*, ďalej ôsmy stĺpec a nakoniec všetky stĺpce v poradí od zdvihového objemu až po *drat*:
+
+```{r }
+data(mtcars)
+tmp <- select(mtcars, c(mpg, wt), starts_with("c"), - carb, 8, disp:drat)
+head(tmp)
+```
+
+Týchto pomocných funkcií je ešte oveľa viac: *ends_with*, *contains*, *matches*, *num_range*, *one_of*, *everything*.  
+
+Pre zmenu, výber riadkov zabezpečuje funkcia *filter*. Obmedzme výber na všetky autá s hmotnosťou pod 3000 libier a výkonom nad 150 koní:
+
+```{r }
+filter(tmp, wt < 3.0 & hp > 150)
+```
+
+Na formulovanie podmienok sa dajú použiť aj funkcie ako *is.na*, *between*, *near*.  
+
+Zoradenie riadkov podľa jedného alebo viacerých stĺpcov zabezpečuje *arrange*, napr. tu zoradíme autá primárne podľa počtu valcov zostupne a sekundárne podľa uloženia valcov.
+
+```{r }
+arrange(tmp, desc(cyl), vs)
+```
+
+Premenovanie stĺpcov pomocou *rename*:
+
+```{r }
+tmp <- rename(tmp, wt_lbs = wt, disp_in3 = disp)
+head(tmp)
+```
+
+Vytvorenie nových stĺpcov cez funkciu *mutate*, v ktorej opäť možno použiť množstvo pomocných funkcií, napr. *recode*, *if_else* ... (pozri nápovedu):
+```{r }
+tmp <- mutate(tmp, disp_dm3 = disp_in3 * 16e-3, disp2cyl_dm3 = disp_dm3 / cyl)
+head(tmp)
+```
+
+Výpočet štatistických súhrnov je možný pomocou *summarize*.
+
+```{r }
+summarize(tmp, mpg_mean = mean(mpg), hp_mean = mean(hp)) 
+```
+
+Táto funkcia však ukáže svoju silu až v kombinácii s *group_by*. Vypočítajme napríklad priemerný dojazd a výkon motora podľa počtu valcov a ich uloženia.
+
+```{r }
+summarize(group_by(mtcars, cyl, vs), 
+          mpg_mean = mean(mpg), hp_mean = mean(hp), number_obs = n(),
+          .groups = "drop"
+)
+```
+Všimnime si, že výsledné dáta sú uložené v dátovej štruktúre podobnej dátovému rámcu, ktorá sa volá _tibble_ a je súčasťou _tidyverse_. Oproti _data.frame_ a) pri vzniku _tibble_ sa nikdy nezmení názov ani typ premennej, b) vo výpise sa zobrazujú iba stĺpce, ktoré sa zmestia na obrazovku, niekoľko prvých riadkov a dátový typ stĺpca, c) volanie neexistujúceho stĺpca skončí chybou namiesto výsledku _Null_, d) subsetovanie `[` vždy vráti tibble a `[[` vždy vektor, e) pri definovaní stĺpca sa zrecykluje iba vektor dĺžky 1, a nakoniec f) _tibble_ nevytvára ani nepoužíva názvy riadkov.
+
+Na záver si predstavíme jeden veľmi užitočný a návykový nástroj, ktorým sa dá vyhnúť vytvoreniu pomocných/dočasných objektov vo výpočtovom prostredí a celkovo sprehľadňuje zdrojový kód. Je ním *pipe operátor* `%>%` importovaný z balíku *magrittr* (kde má ešte množstvo rôznych modifikácií) a slúži na reťazenie príkazov podobne ako skladáme funkcie, napr. `x %>% f() %>% g()` vykoná to isté ako `g(f(x))`.     
+Vypočítajme napr. priemerný dojazd všetkých automobilov s priamou orientáciou valcov a to podľa typu prevodovky a v jednotkách km/l. 
+
+```{r }
+mtcars %>% 
+  filter(vs == 1) %>% 
+  mutate(kmpl = 0.43 * mpg) %>% 
+  group_by(am) %>%
+  summarize(priemerny_dojazd = mean(kmpl)) %>% 
+  ungroup()   # to isté ako .groups = "drop"
+```
+
+So základnými nástrojmi R bez použitia *dplyr* by to vyzeralo napr. takto:
+
+```{r }
+tmp <- subset(mtcars, vs == 1)
+aggregate(kmpl ~ am, 
+          data = cbind(tmp, kmpl = 0.43*tmp$mpg), 
+          FUN = function(x) mean(x)
+)
+```
+
+Jednoduchšou (a predvídateľnejšou) alternatívou ku `%>%` je pipe operátor `%>>%` z balíku *pipeR*.  
+
+Hoci balík *dplyr* sprístupňuje pipe operátor, tento v ďalších kapitolách bude používaný nezávisle (nebude načítaný ani *dplyr* ani *magrittr*) a to pomocou príkazu:
+```{r } 
+`%>%` <- magrittr::`%>%` 
+``` 
+
+ 
+
+## Cvičenie {#transformacia-cvicenie}
+
+1. Načítajte data frame *Cars93* z balíka *MASS*.
+2. Vytvorte nový data frame *auta93* výberom všetkých premenných, ktoré spĺňajú aspoň jednu z nasledujúcich podmienok
+   - prvé tri (použite operátor sekvencie `:`)
+   - ich názov obsahuje "Price" ale neobsahuje ".Price" (*contains*, operator `-`)
+   - ich názov sa začína na "MPG" (*start_with*)
+   - všetky od indikátora airbagov až po výkon motora okrem typu pohonu *DriveTrain* (operátory `:`,`-`)
+   - hmotnosť a pôvod vozidla
+3. Pipe operátorom vytvorte sekvenciu nasledujúcich príkazov
+   1. auta93
+   2. premenovanie premennej *EngineSize* na *CylindersVolume* (*rename*)
+   3. prevod hmotnosti z libier na kilogramy (*mutate*)
+   4. výber všetkých amerických automobilov s hmotnosťou do 1200 kg (*filter*)
+   5. zoradenie primárne podľa kategórie auta *Type* a v druhom rade podľa ceny vzostupne (*arrange*)
+   6. vypísanie (*print*)
+   7. združenie podľa kategórie auta a výpočet priemerneho dojazdu v meste (*group_by*, *summarise*).

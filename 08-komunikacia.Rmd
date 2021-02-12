@@ -1,0 +1,519 @@
+`````{r include=F}
+knitr::opts_chunk$set(
+  collapse = TRUE
+)
+inline <- function(x = "") paste0("`r ", x, "`")
+`%>%` <- magrittr::`%>%`
+`````
+
+# Komunikácia pomocou R Markdown
+
+V začiatkoch používania systému R si ľudia zdrojový kód svojich výpočtov ukladali v skriptovom súbore s príponou *.R*. Spočiatku doň pridávali drobné komentáre ku kódu jednoducho za značku `#`, ale prezentovateľné výstupy vytvárali v špecializovaných programoch ako LaTeX^[Slovo LaTeX sa číta [latech].] či Word kopírovaním kódu a výstupov. Neskôr -- s objavením balíku *knitr* -- sme v štýle *roxygen2*^[Balíkom *roxygen2* sa vďaka špeciálne formátovaným komentárom dá ľahko generovať dokumentácia ku vlastným balíkom -- v zhode s oficiálnou špecifikáciou.] do skriptového súboru začali za značku `#'` dopĺňať širší textový popis. Ten môže byť štrukturovaný do kapitol a vo výstupe sprevádzaný napr. automaticky generovaným obsahom. Nastavenia ku blokom (kúskom) kódu sa zapisujú za značku `#+` a môže sa nimi napr. vypnúť zobrazenie kódu v reporte, nastaviť veľkosť obrázku, či úplne vypnúť vykonanie celého bloku príkazov. Do riadku textu medzi krútené zátvorky `{{` a `}}` sa dá vložiť vykonateľný kód, naopak poznámky medzi dvojicami `/*` a `*/` sa v reporte nezobrazia vôbec. Zmysel skriptového súboru však stále spočíva prevažne v uchovaní kódu jazyka R, a už menej v jeho prezentovaní (spolu s textovými či grafickými výsledkami výpočtov). V tejto kapitole si povieme o ďalších -- vhodnejších formátoch, v ktorých môžme tvoriť obsah a zdielať ho s inými ľuďmi.
+
+Z technického hľadiska, pri kompilácii reportu zo skriptového súboru sa interne zavolá funkcia *knitr::spin*, ktorá súbor s príponou *.R* preloží do súboru vo formáte RMarkdown s príponou *.Rmd* a ten je ďalej funkciou *rmarkdown::render* postupne spracovaný do požadovaného výstupného formátu (pdf, html, doc, odt, epub ...). Čo je to však R Markdown a prečo by sme o ňom mali vedieť? [^WYSIWYG] O tom bude reč už v prvej podkapitole. 
+
+[^WYSIWYG]: A prečo by sme vôbec mali používať nejaký značkovací jazyk, keď sme už roky zvyknutí na MS Word, v ktorom všetko napísané má už napohľad finálne formátovanie (tzv. WYSIWYG, "what you see is what you get")? Pretože písanie textu vo Worde je vhodné pre počítačovo menej zdatných používateľov ale pre vážnejšie úlohy je nevýhodné. Transparentnejšou cestou je *značkovanie* textu, t.j. doplnenie obyčajného textu o značky, ktoré určujú, ako bude text vyzerať. Niektoré značkovacie jazyky ako HTML sú dosť "krikľavé", iné ako napr. Markdown sú subtílnejšie. Výhod značkovacích jazykov je veľa: sú ľahšie prenosné medzi počítačmi, menej viazané na konkrétne softvérové spoločnosti, a v čase stabilnejšie než WYSIWYG textové procesory.
+     
+Dozvieme sa základy formátovania textu a programovacieho kódu, druhá podkapitola predstaví integráciu matematických vzorcov a tretia podkapitola celú plejádu výstupných formátov podľa zamerania technickej správy -- teda toho, ako a s kým sa chceme o výsledky našej analýzy podeliť. Kapitola je inšpirovaná množstvom zdrojov (kníh, blogov, návodov a diskusných príspevkov) dostupných na internete, spomeňme predovšetkým [@wickham2016r] doplnené podrobnosťami z [@xie2018r]. Začiatočník ocení napr. návod pre študentov [@shalizi2016using], naopak pokročilejší používateľ nájde veľa praktických trikov v knihe [@xie2020r].
+  
+## Úvod do R Markdown 
+
+Dokumentový formát "R Markdown" sa objavil s balíkom *knitr* [@xie2020knitr] už v roku 2012, cieľom bolo zakomponovať kúsky kódu programovacieho jazyka do Markdown dokumentu. Okrem Markdown *knitr* podporoval aj iné značkovacie jazyky vrátane LaTeX a HTML, no Markdown sa v priebehu rokov stal aj vďaka svojej jednoduchosti najobľúbenejším. To by však nebolo možné bez uvedenia univerzálneho konvertoru *Pandoc*, ktorého šablóny značne obohacujú možnosti Markdown pri zachovaní jednoduchosti jeho syntaxe.  
+
+R Markdown je/poskytuje jednotný autorský rámec pre data science, ktorý spolu kombinuje kód, jeho výsledky aj autorský text. Cieľom je jednak  
+
+1. komunikácia s ľuďmi (zákazník, manažér), ktorých zaujímajú iba výsledky analýzy a nie samotný kód,
+2. spolupráca s inými analytikmi (vrátane môjho budúceho "ja"), ktorých zaujímajú výsledky a aj to, ako sme sa k nim dostali (teda kód),
+3. vytvoríť prostredie na záznam nielen toho, čo sme *urobili*, ale aj čo sme si pri tom *mysleli*.
+
+R Markdown v sebe integruje množstvo balíkov R a externých nástrojov, preto ako pômocka pri formátovaní už klasický sytém nápovedy R nestačí, je dobré mať poruke ťahák, napr. z `Help > Cheetsheets > R Markdown Reference Guide` alebo zo stránky https://rstudio.com/resources/cheatsheets/.
+
+V prostredí RStudio sa nový dokument vytvorí v ponuke `File > New File > R Markdown`, pričom dialógové okno vyzve na zvolenie šablóny, názvu, autora a výstupného formátu. Vytvorený (textový) súbor obsahuje  
+
+- tzv. YAML hlavičku ohraničenú znakmi `---`,  
+- kúsky kódu (code chunks) jazyka R,   
+- text sprevádzaný formátovacími znakmi.  
+
+Oproti skriptovému súboru s príponou *.R* je tu videť zásadný posun: hlavnú rolu hrá autorský text (už to nie je len komentár kódu), a ten iba dopĺňajú kúsky kódu ohraničené párom trojice opačných úvodzoviek (backticks) ```` ``` ````. Kompilácia (knitting) sa iniciuje a) z ponuky `File > Knit Document`, b) klávesovou skratkou *Ctrl+Shift+K* alebo c) príkazom `rmarkdown::render("názov_súboru.Rmd")`. O priebehu kompilácie (vrátane chybových hlásení) informuje textový výstup pod záložkou R Markdown a výsledok sa zobrazí v samostatnom okne.
+
+V nasledujúcich podkapitolách prejdeme možnosťami všetkých troch častí dokumentu. Začneme textom.
+
+
+### Formátovanie textu {#formatovanie}
+
+Text, ktorý má vhodným spôsobom sprostredkovať autorove myšlienky, potrebuje vhodné formátovanie, aby bol ľahko čitateľný, od úpravu vzhľadu písma až po zobrazenie v tabuľke. 
+Konkrétne, text na zobrazenie *kurzívou* sa obalí dvojicou hviezdičiek `*` alebo podčiarkovníkov `_` (teda `*kurzívou*` alebo `_kurzívou_`), text **hrubým fontom** štvoricou znakov (`**hrubým** __fontom__`), ďalej ~dolný~ a ^horný^ index párom vlnoviek (`~dolný~`) resp. striešok (`^horný^`). Text medzi opačnými úvodzovkami sa zachová `*bez formátovania*` vo fonte kódu (```` `*bez formátovania*` ````) a medzi dvoma pármi vlnoviek sa ~~preškrtne~~ (`~~preškrtne~~`).
+
+**Nadpisy** kapitol sa začínajú jednou, dvoma alebo viacerými mriežkami `#` podľa úrovne vnorenia.
+
+> Citát sa v štandardnej téme R markdown dokumentu zobrazuje odsadeným odsekom, väčším fontom a zvislou čiarou. Stačí začať znakom `>`.
+
+```
+> Citát sa v štandardnej téme R markdown dokumentu zobrazuje odsadeným odsekom, väčším 
+fontom a zvislou čiarou. Stačí začať znakom `>`.
+```
+
+Číslované aj nečíslované **zoznamy** predchádza voľný riadok, potom
+
+* každá položka nečíslovaného zoznamu začína ktorýmkoľvek znakom `*, -, +` 
+* na novom riadku,
+  + každá vnorená položka zoznamu začína na novom riadku odsadením aspoň o _dve medzery_ oproti vyššej úrovni,
+    - možné je ešte hlbšie vnorenie
+  + aj návrat na ľubovoľnú úroveň.
+
+```
+* každá položka nečíslovaného zoznamu začína ktorýmkoľvek znakom `*, -, +` 
+* na novom riadku,
+  + každá vnorená položka zoznamu začína na novom riadku odsadením aspoň o _dve medzery_ 
+  oproti vyššej úrovni,
+    - možné je ešte hlbšie vnorenie
+  + aj návrat na ľubovoľnú úroveň.
+```
+Kvôli prehľadnosti je dobré položky rovnakej úrovne začínať rovnakým znakom. Čo sa týka číslovaného zoznamu,
+
+1. každá položka začína číslicou (0-9) a bodkou,
+3. číslovanie pokračuje automaticky, takže nevadí, keď sa v ďalšej číslici pomýlime alebo niektorú položku zmažeme,
+   b. vnorené položky zoznamu môžu začínať aj písmenom, nemusí byť to prvé v abecede,
+   d. musia však byť odsadené aspoň o __tri medzery__,
+   2. a čo je zaujímavé, vnorené číslovanie môže pokračovať aj číslami.
+8. Hlavné číslovanie pokračuje ďalej automaticky.
+  
+```
+1. Každá položka číslovaného zoznamu začína číslicou (0-9) a bodkou,
+3. číslovanie pokračuje automaticky, takže nevadí, keď sa v ďalšej číslici pomýlime alebo 
+niektorú položku zmažeme,
+   b. vnorené položky zoznamu môžu začínať aj písmenom, nemusí byť to prvé v abecede,
+   d. musia však byť odsadené aspoň o __tri medzery__,
+   2. a čo je zaujímavé, vnorené číslovanie môže pokračovať aj číslami.
+8. Hlavné číslovanie pokračuje ďalej automaticky.
+```
+
+**Hypertextové odkazy** je možné vkladať priamo -- https://www.math.sk/mpm/ -- alebo skryté za kľúčovými frázami ako [fakultná stránka](https://www.svf.stuba.sk) (`[fakultná stránka](https://www.svf.stuba.sk)`). Obrázky sa vkladajú veľmi podobne -- ![logo MPM](pic/cropped-logo-mpm-blue-1-32x32.png) -- s (dobrovoľným) alternatívnym textom v hranatých zátvorkách (`![logo MPM](https://.....png)`). Do rovnakej skupiny patrí aj poznámka pod čiarou^[Poznámka pod čiarou sa vytvorí nasledovne: `text^[poznámka]`]. Aby odkazy (na webstránku, obrázok či poznámku) nemuseli zneprehľadňovať text, R Markdown umožňuje vsunúť iba identifikátor a potom celú adresu uviesť inde, povedzme na konci dokumentu. Napríklad text `[fakultná stránka][svf]` bude vo vete a `[svf]: https://www.svf.stuba.sk/ "Stavebná fakulta"` upratané na inom, vhodnejšom mieste, pričom zjavne *svf* je jedinečný identifikátor a text v úvodzovkách je zobrazovaný ako bublinová nápoveda (tooltip). Podobne sa umiestnia obrázky pomocou `![alternatívny text][id]` v texte, a mimo neho bude uvedený zvyšok `[id]: odkaz/na/obrázok "tooltip"`, resp. poznámka s identifikátorom "`[^id]` v texte a telom `[^id]: ...` mimo neho. Hypertextové odkazy fungujú aj na navigáciu v rámci dokumentu, napr. ten nasledujúci nás presmeruje na začiatok kapitoly [Formátovanie textu](#formatovanie) (`[Formátovanie textu](#formatovanie)`) pomocou vytvorenej záložky za názvom kapitoly (`### Formátovanie textu {#formatovanie}`).
+
+**Tabuľka** s nadpismi a zarovnaním stĺpcov
+
+| Vľavo | Vpravo | Preddefinovane | Na stred |
+|:------|-------:|----------------|:--------:|
+| 12    | 12     | 12             | 12       |
+| 123   | 123    | 123            | 123      |
+
+je výsledkom jednoduchého zápisu.
+
+```
+| Vľavo | Vpravo | Preddefinovane | Na stred |
+|:------|-------:|----------------|:--------:|
+| 12    | 12     | 12             | 12       |
+| 123   | 123    | 123            | 123      |
+```
+
+Samozrejme tabuľky či obrázky sa dajú vytvoriť alebo pripojiť aj pomocou príkazov R, o tom si bližšie povieme v ďalšej kapitole.
+
+
+### Kúsky kódu
+
+Kód jazyka R (podobne ako iného z podporovaných programovacích jazykov) sa v R Markdown dokumente vkladá po blokoch -- tzv. kúskoch (chunk ~ kúsok, sústo, porcia, dávka) -- medzi značky ```` ```{r}```` a ```` ``` ````, ktorých vloženie v prostredí RStudio zabezpečí aj klávesová skratka *Ctrl+Alt+I*. Spustenie kódu po riadkoch alebo vyznačených častiach funguje rovnako ako sme boli doteraz zvyknutí -- klávesovou skratkou *Ctrl+Enter* -- no často je výhodnejšie spustiť celý kúsok naraz pomocou *Ctrl+Shift+Enter*. 
+
+Kúsky by sme mali chápať ako relatívne samostatné jednotky -- podobne ako funkcie -- *zamerané na jednu úlohu*. Každý kúsok môže mať svoj *názov*, čo má niekoľko výhod: a) dá sa ľahšie nájsť pomocou rozbaľovacieho menu vľavo pod oknom skriptového editoru, b) pri zlyhaní kompilácie dokumentu sa rýchlejšie nájde chyba, c) pomôže pri zostavení súboru súvisiacich kúskov, ktoré majú byť pre náročnosť výpočtu po prvom spustení uložené do cache pamäte a obnovené len pri zmene (tzv. caching), d) pomenujú sa po nich súbory obrázkov exportovaných pri konverzii (t.j. ľahšie sa potom manipuluje s vygenerovanými obrázkami). V názve sa odporúča použiť iba alfanumerické znaky a pomlčku.
+
+Za názvom sa zapisujú lokálne nastavenia kúskov oddelené čiarkou (podobne ako v skriptovom súbore za značkou `#+`). Napríklad nasledujúci kúsok R kódu sa volá *súčet* a pri kompilácii sa vďaka nastaveniu ani nespustí, ani v dokumente nezobrazí.
+
+```` ```{r súčet, eval = FALSE, echo = FALSE} ````  
+`a <- 2`  
+`a + 3`  
+```` ``` ````  
+Logická hodnota v nastaveniach môže byť zadaná aj dynamicky, napr. nasledujúci kúsok určí hodnotu jednoduchého časového prepínača   
+
+```` ```{r} ````  
+`# časový prepínač`  
+`podmienka <- Sys.Date() > '2020-05-15'`  
+```` ``` ````  
+a ďalší kúsok sa vykoná len po 15. máji 2020.
+
+```` ```{r eval = podmienka} ````  
+`2 + 3`  
+```` ``` ````  
+
+Balík *knitr* poskytuje takmer 60 nastavení, kompletný zoznam sa nachádza na stránke https://yihui.org/knitr/options/), najdôležitejšie sú tieto (s prednastavenou hodnotou v zátvorke):
+
+* `eval` (TRUE): či sa má kúsok evaluovať (vykonať),
+
+* `echo` (TRUE): či sa má vo výstupnom dokumente zobraziť zdrojový kód
+* `results` ('markup'): ako sa zobrazí textový výstup:
+  + `'hide'`: nezobrazí sa,
+  + `'asis'`: ponechá sa v surovej forme, ako je formátovaný v R,
+  + `'hold'`: zobrazí sa až po vykonaní celého kúsku,
+  + `'markup'`: zobrazí sa v špeciálnom formátovacom prostredí    
+* `collapse` (FALSE): či zlúčiť kód s textovým výstupom do jedného bloku,
+* `warning`, `message` (TRUE): či sa má varovná hláška alebo diagnostická správa zobraziť vo výstupnom dokumente,
+* `error` (FALSE): či pokračovať s kompiláciou aj napriek chybe,
+* `include` (TRUE): či zaradiť kúsok do dokumentu (vykoná sa tak či tak),
+
+* `fig.width` (7), `fig.height` (5): veľkosť grafického výstupu v palcoch, spolu sa dajú zapísať pomocou `fig.dim` napr. `fig.dim=c(7,5)`,
+* `out.width`, `out.height`: veľkosť grafického výstupu vo finálnom dokumente (môže byť v jednotkách podporovaných LaTeX-om či HTML-kom), stačí určiť relatívne, napr. `out.width='80%'`,
+* `fig.align`: horizontálne zarovnanie obrázku (`'left'`, `'center'`, `'right'`),
+* `fig.cap`: popis pod obrázkom,
+* `fig.show` ('asis'): ako ukázať/usporiadať obrázky:
+  + `'asis'`: hneď za kódom, ktorý ho generuje,
+  + `'hold'`: na konci kúsku (vhodné napr. v kombinácii s `out.width` na umiestnenie zmenšenín obrázkov vedľa seba)
+  + `'animate'`: obrázky sa zabalia do animácie (zavolá sa externý program, napr. v Linuxe *ffmpeg*),
+  + `'hide'`: vôbec,
+
+* `cache` (FALSE): či zapnúť caching (toto môže byť veľmi zradné, používať opatrne a len v nevyhnutných prípadoch). 
+
+Často sa opakujúce nastavenie môže byť výhodné vykonať globálne.
+
+```` ```{r nastavenia, include=FALSE} ````  
+`knitr::opts_chunk$set(fig.width = 8, collapse = TRUE)`  
+```` ``` ```` 
+
+Kód sa dá vložiť aj do riadku textu, napr. také Ludolfovo číslo `r pi` tu bolo zobrazené vložením `` `r`` ``pi` ``. Pri vkladaní číselných výstupov do textu je dobré skamarátiť sa s funkciou *format()* resp. *prettyNum()*.
+Vkladanie obrázkov a tabuliek sa ľahšie ovláda pomocou R kúskov než cez Markdown. 
+
+`````{r logoSvF, echo=FALSE, fig.align='center', fig.cap='Logo autorovej alma mater', out.width='25%'}
+knitr::include_graphics("pic/logo_SvF_STU.png")
+`````
+
+```` ```{r logoSvF, fig.align='center', out.width='25%', fig.cap='Logo Stavebnej  fakulty'} ````  
+`knitr::include_graphics("pic/logo_SvF_STU.png")`  
+```` ``` ```` 
+
+Na zobrazenie tabuľky dobre poslúži funkcia *knitr::kable()*.
+
+```{r eval=FALSE}
+knitr::kable(mtcars[1:4, ], caption = "Hlavička mtcars pomocou *kable*") 
+```
+```{r echo=FALSE}
+knitr::kable(mtcars[1:4, ], caption = "Hlavička mtcars pomocou *kable*") %>% 
+  kableExtra::kable_styling(latex_options = "HOLD_position")
+# inak tabuľku v pdf umiestni na začiatok strany
+# alternatívne zmazať caption a do nastavenia kúsku vložiť fig.pos='t'
+```
+
+Jemnejšiu kontrolu nad vzhľadom tabuliek poskytne napr. balík *kableExtra*. 
+
+`````{r eval=knitr::is_html_output()}
+dat <- tibble::tibble(
+  "účinná látka" = rep(c("paracetamol","ibuprofen"), each = 2),
+  pacient = 1:4,
+  A = c(138, 126, 163, 145),
+  B = c(135, 174, 125, 155),
+  C = c(137, 123, 168, 167)
+)
+
+dat %>% 
+  knitr::kable(format = "html") %>% 
+  kableExtra::kable_styling(bootstrap_options = "hover", full_width = F) %>% 
+  kableExtra::collapse_rows(columns = 1, valign = "middle") %>% 
+  kableExtra::add_header_above(c(" "," ", "epocha" = 3))
+`````
+
+Vignette alebo webstránka balíku (https://haozhu233.github.io/kableExtra/) ponúka veľa príkladov užitočných i extravagantných tabuliek.  
+
+Alternatívne sa dá použiť aj balík *xtable* (https://cran.r-project.org/web/packages/xtable/vignettes/xtableGallery.pdf).
+ 
+### YAML hlavička
+
+Vzhľad celého dokumentu môžme meniť aj pomocou nastavení v YAML hlavičke ^[Skratka YAML pôvodne označovala spojenie "yet another markup language",  neskôr bola zmenená na rekurzívny akronym pre "YAML ain't markup language".]. Uzavretá medzi dvojicu `---` štandardne obsahuje názov dokumentu (`title`), meno autora (`author`), dátum (`date`) a formát výstupného dokumentu (`output`). Práve od formátu dosť závisí, aké ďalšie nastavenia možno v hlavičke použiť. Napríklad hlavička 
+```yaml
+---
+title: "Štatistický softvér R"
+author: "Tomáš Bacigál"
+date: `r inline("format(Sys.time(), '%d.%m.%Y')")`
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: false
+    theme: default
+---
+```
+spôsobí, že výstupom je HTML dokument obsahujúci tabuľku obsahu, ktorá zobrazuje najviac tri úrovne nadpisov kapitol (nie sú číslované) a pri posúvaní dokumentu (skrolovaní) zostáva viditeľná. Prehľad štandardných aj niektorých externých tém poskytne stránka https://www.datadreaming.org/post/r-markdown-theme-gallery/.  
+Nastavenia sa dajú generovať aj dynamicky pomocou parametrov, pozri napr. [@wickham2016r, kapitola 27.6.1 Parameters]. To je užitočné vtedy, ak treba rovnaký report generovať s rôznymi nastaveniami.
+
+***
+
+Každý seriózny dokument by mal mať zoznam použitej literatúry s odkazmi v texte. Parametrom `bibliography` sa dá odkázať na bibliografickú databázu vo formáte BibTex (súbor s príponou *.bib*, no ešte jednoznačnejšie *.bibtex*) alebo v inom.
+```yaml
+bibliography: literatura.bib 
+```
+Nasledujúci príklad jednej položky v súbore *literatura.bib* ilustruje syntax tohto bibliografického formátu,
+```
+@book{wickham2016r,
+  author = "Hadley Wickham and Garet Grolemund",
+  title = "R for Data Science: Import, Tidy, Transform, Visualize, and Model Data",
+  year = "2016",
+  publisher = "O'Reilly Media, Inc."
+}
+```
+bližšie info sa dá nájsť napr. vo wiki manuáli ku typografickému systému LaTeX (https://en.wikibooks.org/wiki/LaTeX/Bibliography_Management#BibTeX). Alternatívne, ak citovaných zdrojov nie je veľa, alebo ak ešte nemáme vytvorenú databázu, prípadne ak sa chceme vyhnúť závislosti na externom súbore, môžme bibliografické údaje vložiť priamo do YAML hlavičky (v CSL JSON formáte). 
+```yaml
+references:
+- id: wickham2016r
+  title: R for Data Science`:` Import, Tidy, Transform, Visualize, and Model Data
+  author:
+  - family: Wickham
+    given: Hadley
+  - family: Grolemund
+    given: Garet
+  issued:
+  - year: 2016
+  publisher: O'Reilly Media, Inc.
+  type: book
+--- 
+``` 
+Zdroje sa v texte citujú vložením identifikátora za znakom `@` do hranatých zátvoriek, napr. `[@wickham2016r]` sa v prednastavenom citačnom štýle Chicago zobrazí ako (Wickham and Grolemund 2016). No funguje aj verzia bez hranatých zátvoriek `@wickham2016r`, v texte ako Wickham and Grolemund (2016). Na konci dokumentu sa citovaný zdroj zobrazí ako položka zoznamu: 
+```
+Wickham, Hadley, and Garet Grolemund. 2016. R for Data Science: Import, Tidy, Transform,
+Visualize, and Model Data. O’Reilly Media, Inc.
+```
+Bližšie info možno získať napr. na stránkach https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html a https://pandoc.org/MANUAL.html#citations.
+ 
+## Matematické výrazy   
+
+Vďaka reportu môžeme korektnosť výsledkov svojho výpočtu podložiť zverejneným kódom. V pozadí výpočtu však stojí aj nejaká teória -- tá (nielen vo vedeckých článkoch či diplomových prácach) zvyčajne zaujíma miesto na začiatku dokumentu hneď po motivačnom úvode. Súčasťou teoretickej rozpravy sú aj matematické vzorce (keďže je často efektívnejšie vyjadriť vzťahy nimi než slovným opisom). 
+
+Kto raz začal práce s matematickým obsahom písať v typografickom systéme LaTeX, ten sa už sotva dobrovoľne vráti ku WYSIWYG procesoru akým je MS Word, kde sa vzorce vkladajú z palety ako grafické elementy. Už voľne šíriteľná alternatíva ku MS Word -- textový procesor LibreOffice Writer -- vkladanie vzorcov rieši textovým vstupom pomocou svojho jednoduchého značkovacieho jazyka, čo po osvojení syntaxe prácu výrazne zrýchli. Systém LaTeX má ešte bohatšie možnosti vytvárania (nielen) matematického obsahu, nevýhodou je strmšia krivka učenia (*learning curve*) na začiatku učenia sa. Dobrá správa je, že R Markdown používa rovnakú syntax ako LaTeX, takže skúsenejší čitateľ môže túto kapitolu pokojne preskočiť (užitočný prehľad poskytuje aj wiki stránka https://en.wikibooks.org/wiki/LaTeX/Mathematics alebo slovenský preklad známeho manuálu [@oetiker1999nie, najmä Kapitola 3]. 
+
+Podobne ako kód, aj vzorce sa dajú písať v texte -- ohraničené párom dolárov (`$S=\pi r^2$` sa zobrazí do $S=\pi r^2$) -- alebo v samostatnom riadku (riadkoch) medzi `\[` a `\]` či medzi dvojitými dolármi `$$` a `$$`. 
+```
+\[
+S = \pi r^2
+\]
+```
+\[ 
+S = \pi r^2. 
+\] 
+Číslovanie vzorcov dosiahneme napr. pomocou LaTaX-ovského prostredia *equation* ^[Prostredím "názov" sa tu rozumie obalujúca dvojica `\begin{názov}` a `\end{názov}`.].
+```
+\begin{equation}
+S = \pi r^2
+\end{equation}
+```
+fungovať však bude iba vo výstupnom formáte `pdf_document`, keďže je spracovávaný systémom LaTeX. Podporu číslovania naprieč rôznymi výstupnými formátmi ošetruje až balík *bookdown*, o ktorom bude reč nižšie. Viacriadkové vzorce prostredníctvom zarovnávacieho znaku `&` a zalomenia riadku `\\` zabezpečuje napr. prostredie *eqnarray*.
+```
+\begin{eqnarray}
+S & = & \pi r^2 \\
+\sqrt{\frac{S}{\pi}} & = & r
+\end{eqnarray}
+```
+\begin{eqnarray}
+S & = & \pi r^2 \\
+\sqrt{\frac{S}{\pi}} & = & r
+\end{eqnarray}
+Premenné značené písmenami latinskej abecedy sú v matematickom móde štandardne sádzané kurzívou, potom napr. zhrubnutie sa vykoná pomocou `\mathbf`. Grécke písmená sa značia svojim názvom za lomítkom, napr. `\omega` $\omega$ a `\Omega` $\Omega$. Zátvorky sa prispôsobia svojmu obsahu, ak ich doplníme dvojicou `\left` a `\right`.   
+```
+$$
+\left( \sum_{i=1}^n v_i^2 \right) = \mathbf{v}\cdot\mathbf{v} = \alpha \in \mathbb{R}
+$$
+```
+$$
+\left( \sum_{i=1}^n v_i^2 \right)= \mathbf{v}\cdot\mathbf{v} = \alpha \in \mathbb{R}
+$$
+Podobne ako R -- aj systém LaTeX má množstvo rozširujúcich balíčkov. Pre písanie matematických výrazov je najznámejším *amsmath*, v ktorom sú definované okrem iného aj rôzne prostredia pre viacriadkové zarovnanie ako napr. *align* alebo *cases*. Tento balík je automaticky systémom načítaný, no iné balíky by bolo potrebné v YAML hlavičke inicializovať. Rovnako by to bolo aj s LaTeX príkazmi, ktoré patria do preambuly (teda pred telo) LaTeX dokumentu. Treba však upozorniť, že nie všetky slová jazyku LaTeX budú fungovať mimo PDF formátu výstupného dokumentu bez problémov. S nasledujúcou položkou v YAML hlavičke
+```
+header-includes:
+   - \usepackage{xcolor}
+   - \newcommand*\rfrac[2]{{}^{#1}\!/_{#2}}
+```
+sa `$\rfrac{3}{7}$` zobrazí do $^3\!/_7$ v PDF aj HTML (rovnako ako `$^3\!/_7$`, kde `\!` predstavuje medzeru so zápornou dĺžkou). No napríklad `$\color{blue} A = B + \textcolor{red}{C}$` by fungovalo iba v PDF ($\color{blue}{A = B + }\color{red}{C}$), pretože v HTML by riadok `\usepackage{xcolor}` nemal efekt. V tomto prípade je lepšie použiť `$\color{blue}{A = B + }\color{red}{C}$`. ^[Aj príkaz `\color` je z LaTeX-ovského balíka *xcolor*, no funguje trochu inak než ten defaultne implementovaný v R Markdown.]
+
+
+## Výstupné formáty
+
+Dosiaľ sme R Markdown používali na generovanie HTML dokumentov. V tejto kapitole sa pozrieme na niektoré najpoužívanejšie výstupy z množstva existujúcich typov, budeme čerpať najmä z [@wickham2016r, kapitola 29], doplnkovo z [@xie2018r].  
+
+Sú dva spôsoby ako nastaviť typ výstupu:
+
+1. Napevno v YAML hlavičke  
+   ```yaml
+   output: html_document
+   ```
+   najjednoduchšie využitím šablóny pri vytváraní nového súboru v RStudio, v ponuke  `File > New file`.
+2. Dynamicky pri volaní kompilátora.
+   ```{r eval=FALSE}
+   rmarkdown::render("zdroj.Rmd", output_format = "html_document")
+   ```
+
+Voľba *Knit Document* prevedie zdroj do prvého formátu uvedeného za poľom `output` v YAML hlavičke. Ak chceme vygenerovať viac typov výstupov naraz, uvedieme v hlavičke súboru "zdroj.Rmd" ich nastavenia, napr.
+```yaml
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  pdf_document: default
+```
+a spustíme `rmarkdown::render("zdroj.Rmd", output_format = "all")`. Kompletný zoznam možných nastavení prezradí nápoveda, napr. `?rmarkdown::html_document`, z nich potom buď doplníme do YAML hlavičky, alebo uvedieme priamo pri volaní prekladača (vtedy majú vyššiu prioritu).
+
+`````{r eval=FALSE}
+rmarkdown::render("zdroj.Rmd", output_format = html_document(
+  toc = TRUE, 
+  toc_float = TRUE
+  )
+)
+`````
+
+V nasledujúcich podkapitolách si zbežne predstavíme výstupné formáty triedené podľa *účelu*. Podrobnejšie sú rozobraté v [@xie2018r]. Galéria https://rmarkdown.rstudio.com/gallery.html poskytne názornú ilustráciu.
+
+### Dokument
+
+Okrem dobre známeho `html_document` sú v ponuke aj
+
+- `pdf_document` - generuje súbor vo formáte PDF pomocou typografického systému LaTeX. Ak nie je LaTeX v operačnom systéme prítomný, RStudio ponúkne inštaláciu odľahčenej distribúcie *TinyTex*, na ktorú netreba administrátorske oprávnenie. Manuálna inštalácia je možná jednoducho pomocou balíku *tinytex*.
+  ```r
+  tinytex::install_tinytex()
+  ```
+  Množstvo praktických príkladov pre generovanie HTML a PDF z R Markdown ponúka [@xie2020r]. 
+- `word_document` - dokument v proprietárnom formáte Microsoft Word (.docx),
+- `odt_document` - dokument v otvorenom formáte OpenDocument Text (.odt), ktorý používa napr. textový procesor LibreOffice Writer,
+- `rtf_document` - proprietárny Rich Text formát (.rtf), prakticky textový predchodca binárneho doc formátu,
+- `md_document` - Markdown dokument (.md),
+- `github_document` - upravená verzia md_document určená pre zdielanie vo webovej službe na podporu vývoja softvéru, *GitHub*.
+
+Pripomeňme, že tie dokumenty, ktoré sú  určené len pre sprostredkovanie výsledkov analýzy, by mali mať vypnuté zobrazenie kódu. To sa dá dosiahnuť buď globálnym nastavením `echo = FALSE`,
+```r
+knitr::opts_chunk$set(echo = FALSE)
+```
+alebo pre HTML efektným zbalením (s možnosťou interaktívneho rozbalenia) kúskov pomocou položky v YAML.
+
+```yaml
+output:
+html_document:
+  code_folding: hide
+```
+
+### Notebook
+
+Formát `html_notebook` je obmena formátu `html_document`. Výstupy sú podobné, ale účel je iný. Zatiaľ čo *document* slúži na komunikáciu výsledkov s ľuďmi, pre ktorých je analýza určená, *notebook* je zameraný na spoluprácu s ostatnými analytikmi v tíme, čiže je to v pravom zmysle slova *zápisník* uchovávajúci naše myšlienky v procese analýzy. HTML výstup zápisníku (.nb.html) tak navyše oproti dokumentu (.html) vždy obsahuje úplný zdrojový kód -- dôsledkom je, že v prehliadači sa zobrazia výsledky vrátane zdrojového kódu, ale ak sa otvorí RStudio-m, obnoví sa (extrahuje z .nb.html a vytvorí na disku) zdrojový súbor .Rmd. V budúcnosti by malo byť možné do .nb.html zahrnúť aj podporné súbory (napríklad dáta v .csv). 
+
+Hoci zdielanie analýz s kolegami cez .nb.html je jednoduché, zaznamenávanie zmien môže byť strastiplnou skúsenosťou (takou býva aj vytváranie viacerých pracovných verzií jediným vývojárom). Vtedy prichádza čas naučiť sa pracovať so systémami riadenia revízií *Git* alebo *Subversion*. Viac info poskytne článok https://support.rstudio.com/hc/en-us/articles/200532077, špeciálne Git a GitHub v R rozoberá podrobnejšia publikácia [@bryan2018happy]. Zíde sa to aj pre jednoduché publikovanie vlastných programov na webe.  
+Jednoduchý a názorný návod ako publikovať online získame napr. na stránke https://rpubs.com/cathydatascience/518692.
+
+Samotná práca so zápisníkom sa veľmi nelíši od práce s bežným .Rmd dokumentom (v kontraste ku klasickému skriptovému súboru a konzole), výsledky sa rovnako zobrazujú priamo pod kúskami kódu (ak v paneli nástrojov nezvolíme 'Chunk Output in Console'), kúsky sa vytvárajú skratkou `Ctrl+Alt+I`, spúšťajú pomocou`Ctrl+Shift+Enter`, kód v riadkoch textu spustený cez `Ctrl+Enter` sa zobrazí vo "vyskakovacom" (pop-up) okienku, pracovný adresár je automaticky nastavený na rovnaký v akom je zdrojový súbor, grafický výstup je štandardne prispôsobený šírke okna a v zlatom pomere, chyba pri vykonaní kúsku je indikovaná červeným pruhom v problematickom riadku atď.  
+Zásadný rozdiel je v tom, že kým R Markdown dokumenty sú "upletené" (knitted), zápisníky sú "nahliadané" (previewed). To znamená, že hoci oba výstupy vyzerajú podobne, náhľad zápisníku *nevykoná žiaden kúsok* kódu - náhľad je generovaný automaticky pri každom uložení zdrojového súboru, a obsahuje iba výstupy, ktoré sme vygenerovali/ponechali v okne editora.
+
+### Prezentácia
+
+Áno, pomocou R Markdown sa dajú robiť aj prezentácie. ^[Autor tejto príručky kedysi dávno (tak ako všetci) začal programom Power Point, potom zvládol LaTeX Beamer, no odkedy vyskúšal prezentácie s R-kom, už je lenivý vrátiť sa k čistému Beamer-u -- i keď slajdy neobsahujú ani čiarku kódu R.] Netreba síce čakať vizuálne ohňostroje ako v zľudovenom PowerPoint-e, no aspoň zostáva viac času na tvorbu obsahu. Navyše, ak má prezentácia obsahovať kúsky kódu alebo aspoň výsledky výpočtov, úspora času je priepastná.
+
+Prezentácie sa delia na slajdy, každý slajd sa iniciuje ako nadpis prvej (`#`) alebo druhej úrovne (`##`), prípadne slajd bez nadpisu ako vodorovná čiara (`***` alebo `---`). R Markdown má štyri vstavané prezentačné formáty
+
+- `ioslides_presentation` -- HTML prezentácia štandardom *ioslides*,
+- `slidy_presentation` -- HTML prezentácia štandardom *W3C Slidy*,
+- `beamer_presentation` -- PDF prezentácia pomocou *LaTeX Beamer*,
+- `powerpoint_presentation` -- PPTX prezentácia kompatibilná s MS PowerPoint alebo LibreOffice Impress,
+
+a ďalšie sú dostupné v balíkoch, napr.
+
+ - `revealjs::revealjs_presentation` -- ďalší štýl HTML prezentácie, založený na JavaScript knižnici *reveal.js*,
+ - `xaringan::moon_reader` -- ešte jeden štýl HTML prezentácie, tentoraz založený na JavaScript knižnici *remark.js*, 
+ - `rmdshower::shower_presentation` -- a ešte jeden populárny štýl HTML prezentácie.
+ 
+Každý formát prezentácií má svoje špecifické nastavenia, podrobne v publikácii [@xie2018r, kapitoly 4,7,8 a 9.3].
+ 
+### Dashboard
+
+Príznačný názov ("prístrojová doska") pre formát, ktorý ma za cieľ odkomunikovať čo najviac informácií vizuálne a rýchlo. Balík *flexdashboard* obzvlášť uľahčuje vytváranie prístrojových dosiek, treba len špecifikovať formát výstupu
+```yaml
+output: flexdashboard::flex_dashboard
+```
+
+a pomocou systému využitia nadpisov
+
+1. úrovne (`#`) začať novú stranu,
+2. úrovne (`##`) začať nový stĺpec,
+3. úrovne (`###`) začať nový riadok. 
+
+
+Dashboards sú obzvlášť bežné pri technických správach v biznis štýle, môžu byť použité na zvýraznenie krátkych a kľúčových sumárov správy. Prvky prístrojovej dosky sú často usporiadané v mriežke -- do okienok rôznych veľkostí. Dajú sa pri tom použiť dizajnové vychytávky ako postranný panel, preklikávacie záložky (tabsets), číselné rámčeky či "budíky" ako ich poznáme z prístrojových dosiek v aute. Ukážky možných layout-ov aj s návodom na použitie ponúka stránka https://rmarkdown.rstudio.com/flexdashboard/.
+
+
+### Webstránka
+
+Všetky R Markdown formáty, o ktorých bola doteraz reč, tvorí jediný dokument (v širšom zmysle) generovaný jediným zdrojovým súborom. V jednom projekte je však možné pracovať aj s viacerými .Rmd súbormi a výstupmi usporiadanými nejakým zmysluplným spôsobom (napr. so vzájomnými odkazmi). Jedna aplikácia je spájanie viacerých zdrojových súborov (kapitoly) do jedného výstupného dokumentu (kniha), druhá je vytvoriť sieť vzájomne prepojených dokumentov (jednej webovej stránky -- website). V tejto kapitole sa budeme venovať druhej aplikácii.
+ 
+Previesť svoju zbierku zdrojových súborov .Rmd do webstránky je jednoduché, treba na to
+
+1. uložiť všetky súbory do jedného adresáru, ten s názvom `index.Rmd` bude domovský, jeho obsah môže byť napr.  
+   ```
+   ---
+   title: "Moja webstránka"
+   ---
+   Hurá, toto je moja prvá webstránka!
+   ```
+   a druhý súbor s ľubovoľným názvom - povedzme `about.Rmd` - nech obsahuje   
+   ```
+   ---
+   title: "O tejto webstránke"
+   ---
+   Urobil som ju úplne sám.
+   ```
+2. pridať YAML súbor `_site.yml`, ktorý obsahuje navigáciu webstránky, napr.
+   ```yaml
+   name: "my-website"
+   navbar:
+     title: "My Website"
+     left:
+       - text: "Domov"
+         href: index.html
+       - text: "O stránke"
+         href: about.html
+   ```
+3. nastaviť pracovný adresár a zavolať funkciu `rmarkdown::render_site()`. 
+
+Všetky .Rmd súbory sa tým prevedú na .html súbory uložené v priečinku `_site` spolu s ďalšími sprievodnými súbormi (CSS, JavaScript ...). Obsah tohto adresára je kompletná a plne samostatná, statická webstránka pripravená na upload (napr. v bezplatnej hosťujúcej službe https://pages.github.com/, ktorá našu webstránku sprístupní na adrese `https://názov.github.io`).
+
+Ako inak, vývojové prostredie RStudio dokáže proces tvorby webstránky uľahčiť. Stačí vytvoriť nový projekt (`File > New project`) a pri výbere šablóny zvoliť `Simple R Markdown Website`. Vytvoria sa tri základné súbory (.Rmd a .yml), možno pridávať ďalšie, kompilovať a upravovať až kým nepríde čas zošiť ich dokopy pomocou záložky `Build` v pravom hornom paneli.
+
+S tvorbou zložitejších stránok pomôže balík *blogdown*.
+
+
+### Ďalšie formáty
+
+Ak štandardné formáty z nejakého dôvodu nepostačujú našim potrebám, je pravdepodobné, že nie sme jediní a niekto z veľkej komunity okolo R si dal tú námahu, aby vytvoril balík na uspokojenie tých potrieb. Napr. 
+
+- hoci jeden dokument možno vytvoriť spojením výstupu z viacerých zdrojových .Rmd súborov (slúži na to položka `child` v nastaveniach kúskov) aj štandardnými nástrojmi R Markdown, až balík *bookdown* posúva tvorbu komplexnejších dokumentov (ako sú študijné materiály, diplomovky, knihy... alebo hoci aj denníček) na znesiteľnú úroveň, aby vyzerali rovnako profesionálne v *tlačenej podobe i online*. Rozdiel je práve v malých či väčších vychytávkach, ktoré umožňujú sústrediť sa viac na obsah než technické riešenie, a to napr. pridaním podpory viacstránkových HTML dokumentov (s navigáciou), automatického číslovania a odkazov na obrázky/tabuľky/kapitoly/rovnice/matematické vety, zarovnania obrázkov/tabuliek v HTML, podporou špeciálnych kapitol (časti, prílohy) a pod. Viac prezradí autor balíku v manuáli [@xie2016bookdown].
+- štandardné témy HTML dokumentov sú založené na knižnici Bootstrap a hoci vyzerajú pekne, veľkosť .html súborov je relatívne veľká, napr. už prázdny dokument zaberá okolo 600kB. Dá sa to vyriešiť nastavením `theme: null`, no výsledok svojim sparťanským vzhľadom pripomína skôr počiatky internetu než moderný dokument. Balíkom *prettydoc* sa dajú dosiahnuť pekné a zároveň veľkosťou úsporné dokumenty (prázdny má iba okolo 70kB), stačí len v hlavičke špecifikovať `output: prettydoc::html_pretty` a prípadne zvoliť tému podľa chuti. Treba však zabudnúť na funkcie ako `code_folding` či `toc_float`. Podrobnejšie na stránke https://github.com/yixuan/prettydoc.
+- akademické časopisy často od autorov vyžadujú dodanie svojich článkov v špeciálnom formátovaní. V súčasnosti iba máloktorý časopis prijíma práce v R Markdown formáte, väčšina však podporuje LaTeX. Konverzia z LaTeX do  Markdown je síce možná, no vzhľadom na množstvo požiadaviek a štýlov býva často aj komplikovaná. Balík *rticles* poskytnutím šablón uľahčuje generovanie PDF článku v správnom formátovaní. Pri vytváraní nového dokumentu stačí len zvoliť správny časopis, v RStudio `File > New File > R Markdown > From Template` alebo z príkazového riadku:
+  ```r
+  rmarkdown::draft(file = "moj_clanok.Rmd", 
+                   template = "jss_article", 
+                   package = "rticles"
+  )
+  ```
+ Zoznam všetkých dostupných šablón prezradí `getNamespaceExports("rticles")`.
+
+
+Všetky html formáty (dokument, notebook, prezentácia či dashboard) umožňujú zahrnúť aj interaktívne prvky. Najjednoduchšie pomocou widget-ov *htmlwidgets*, ktorým na svoj beh stačí HTML prehliadač a JavaScript (client-side interactivity). Väčšie možnosti poskytuje *shiny* ale za cenu potreby serveru, na ktorom pobeží R (server-side interactivity). Pre lektorov môže byť zaujímavá možnosť vytvárať interaktívne (*shiny*) tutoriály s balíkom *learnr*, ktorý podporuje cvičenia od kvízových otázok s možnosťami až po voľné experimentovanie, umožňuje zobraziť riešenie/nápovedu a navigačný panel či vložiť video.
+
+Pokiaľ by nám žiaden formát nestačil a chceme/musíme napr. PDF dokumenty naďalej vytvárať/upraviť v systéme LaTeX manuálne (v editoroch ako TeXstudio, Texmaker a pod.), príde vhod nastavenie
+
+```yaml
+output: 
+  pdf_document:
+    keep_tex: true    
+```
+
+vďaka ktorému sa (v procese kompilácie .pdf súboru dočasne vytvorený) LaTeX-ovský zdrojový súbor nezmaže takže z neho môžme ľahko kopírovať potrebné časti.
+
+## Záver
+
+Z celej kapitoly musí byť teraz jasné, aký užitočný nástroj sa skrýva v  R Markdown. Spája skriptový editor a príkazový riadok a zmazáva rozdiel medzi interaktívnym objavovaním a dlhodobým záznamom kódu. Jednoducho pracujete na jednom bloku (kúsku) kódu -- tvoríte, spúšťate, upravujete -- a keď ste spokojní, začnete nový blok. Popri tom zaznamenávate myšlienky spojené s popisom toho, čo daný blok robí. Takto jednak nezabudnete, čo ste robili, jednak v sebe podporujete starostlivé premýšľanie a nakoniec pomáhate druhým členom tímu pochopiť vašu časť analýzy.
+
+Tieto a ďalšie užitočné rady pri vytváraní záznamov z analýz dáva [@wickham2016r, kapitola 30 R Markdown workflow]: 
+
+- Dajte každému dokumentu zmysluplný názov (aj súboru na disku) a v prvom odstavci krátko popíšte ciele analýzy.
+- Použite YAML hlavičku na záznam dátumu začiatku práce, najlepšie v ISO formáte YYYY-MM-DD.
+- Ak ste analýzou strávili veľa času a jej myšlienka sa nakoniec ukáže byť slepou ulicou, nič nemažte. Dopíšte do dokumentu krátku poznámku, prečo analýza zlyhala. To vám pomôže nezablúdiť do rovnakej slepej ulice, ak sa ku analýze vrátite niekedy v budúcnosti.
+- Ak nájdete chybu v dátovom súbore, nikdy ju neopravujte priamo. Namiesto toho napíšte kód na opravu chybnej hodnoty a zdôvodnenie. 
+- Predtým než na konci dňa ukončíte svoju prácu, ubezpečte sa, že sa dokument dá skompilovať (a vyčistite cache pamäť). Problémy sa ľahšie riešia, kým je kód ešte čerstvej pamäti.
+- Ak chcete mať svoj kód reprodukovateľný v dlhodobom horizonte (t.j. že bude bez chyby bežat napr. aj o rok), bude treba sledovať verzie použitých balíkov. Starostlivý prístup používa buď balík *pacrat*, ktorý uchováva balíky v adresári projektu, alebo *checkpoint*, ktorý reinštaluje balíky dostupné v danom čase. Ak nezvolíte starostlivý prístup, použite aspoň funkciu *sessionInfo* na zaznamenanie čísla aktuálnych verzií balíkov.
+- Ak je predpoklad, že počas svojej kariéry vytvoríte množstvo dokumentov z analýz, je rozumné popremýšľať nad ich organizáciou, aby sa dali v budúcnosti ľahko nájsť. Odporúča sa triediť ich do jednotlivých projektov a vymyslieť vhodnú názvoslovnú schému.
+
+## Cvičenie
+
+1. Zvoľte si zaujímavý problém z oblasti vášho výskumu (alebo z inej, Vám blízkej oblasti), a vyriešte ho v systéme R. 
+2. Pomocou R Markdown o tom vytvorte technickú správu, ktorá bude obsahovať motivačný úvod, teoretické pozadie (ideálne s použitím matematických vzťahov), kód použitý vo výpočte, vhodne formátované výsledky, ich komentár i celkové zhodnotenie riešeného problému v závere. Správu skompilujte vo formáte HTML aj PDF.
+3. Zhrňte technickú správu v krátkej prezentácii (5-10 slajdov).
+4. Publikujte svoju správu na internete, najjednoduchšie na [RPubs](https://rpubs.com/).
+

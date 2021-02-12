@@ -1,0 +1,228 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  out.width = '70%',
+  fig.align = 'center'
+)
+`%>%` <- magrittr::`%>%`
+```
+
+# Interaktívna vizualizácia
+
+Vrátime sa ku vizualizácii. Videli sme, že balík _ggplot2_ produkuje elegantnú grafiku, ktorou môžeme bez hanby prezentovať svoje analýzy. Využiteľnosť grafickej informácie sa však za určitých okolností dá ešte zvýšiť - a to interaktivitou. Tým rozumieme  napr. zväčšenie časti grafu (zoom), vyvolanie bublinovej nápovedy (tooltip) nájazdom kurzora, alebo voľbu zobrazených premenných pomocou zaškrtávacieho zoznamu (checklist) či voľbu rozsahu pomocou posuvníkov (slider). 
+
+Inšpiráciou tejto kapitoly je veľké množstvo aplikácií interaktívnej grafiky na internete - počnúc galériou https://www.r-graph-gallery.com/interactive-charts.html. Praktický úvod a návod ku nástrojom *htmlwidgets* a *shiny*  poskytuje napr. príspevok [@engel2020data, kapitola 2].
+
+Pochopiteľne, zobrazenie interaktívnych grafov je v statickom dokumente (typu HTML a obzvlášť PDF) veľmi obmedzené. Preto je na čitateľovi tejto učebnice, aby si nasledujúce príklady sám vyskúšal.  
+
+## ggvis
+
+Jedným z ideových nasledovníkov balíku *ggplot2* a celkovo gramatických pravidiel grafiky je balík *ggvis* [@chang2020ggvis]. V skladaní komponentov ide ešte ďalej, integruje reťazenie príkazov (pipe) a pridáva napr. aj interaktívne prvky. Celý koncept je však zatiaľ skôr hudbou budúcnosti a vývoj balíka je dočasne pozastavený v prospech dolaďovania súčasných projektov z ekosystému *tidyverse*.
+
+```{r eval=FALSE}
+library(ggvis)
+mtcars %>%
+  ggvis(x = ~disp, y = ~mpg) %>%
+  dplyr::mutate(disp = disp / 61.0237) %>% # convert engine displacement to litres
+  layer_points()
+```
+
+Príklad s posuvníkom (slider):
+
+```{r ggvis, eval = FALSE}
+mtcars %>% 
+  ggvis(~wt) %>% 
+  layer_histograms(width =  input_slider(0, 2, step = 0.10, label = "width"))
+detach("package:ggvis", unload = TRUE)
+```
+
+Okrem *input_slider()* sa núkajú aj *input_checkbox()*, *input_checkboxgroup()*, *input_numeric()*, *input_radiobuttons()*, *input_select()* a *input_text()*, ale napr. aj *add_tooltip()*.  
+
+Podrobné návody sa dajú nájsť napr. na stránkach:  
+https://ggvis.rstudio.com/ggvis-basics.html  
+https://towardsdatascience.com/a-short-introduction-to-ggvis-52a4c104df71
+
+
+## htmlwidgets
+
+JavaScript je pravdepodobne najviac využívaný skriptovací jazyk na tvorbu interaktívnych webstránok. Balík *htmlwidgets* poskytuje framework na prepojenie R s rôznymi interaktívnymi JavaScript-ovými knižnicami.^[Aj *ggvis* využíva JavaScript, ale cez knižnicu Vega, nie *htmlwidgets*.] Takto vytvorené interaktívne komponenty (*widgety*) sa dajú  
+- využiť v príkazovom riadku R podobne ako tradičné grafy (v RStudiu cez Viewer)  
+- zakomponovať do *R Markdown* dokumentov a *Shiny* web aplikácií  
+- uložiť ako samostatné webové stránky na jednoduché zdielanie cez email, cloudové úložiská a pod.
+
+### plotly
+
+Jedným z najužitočnejších balíkov v tejto triede je *plotly*, pretože na interaktívny dokáže premeniť akýkoľvek graf ggplot. Ako vidieť v nasledujúcom príklade, nie všetko je ešte celkom doladené, tu napr. popis legendy zasahuje do hornej lišty nástrojov. Pohrajte sa s aktívnymi prvkami grafu, napríklad vypínanie/zapínanie vrstiev, zoomovanie atď.
+
+```{r message=F}
+library(ggplot2)
+p <- ggplot(data = mpg, mapping = aes(x = displ, y = cty, color = drv)) + 
+  geom_point()
+detach("package:ggplot2")
+```
+```{r message=F}
+library(plotly)
+ggplotly(p)
+```
+
+Balík má však aj svoje vlastné vysoko-úrovňové funkcie, napríklad
+
+```{r eval=knitr::is_html_output()}
+plot_ly(data = ggplot2::mpg, x = ~displ, y = ~cty, color = ~drv, 
+        type = "scatter", mode = "markers") %>% 
+  layout(legend = list(title = list(text = '<b> drv </b>')))
+```
+
+ktoré zvládnu aj 3D (vrátene možnosti rotácie):
+
+```{r eval=knitr::is_html_output()}
+plot_ly(data = ggplot2::mpg, x = ~displ, y = ~cty, z = ~cyl, color = ~drv, 
+        type = "scatter3d", mode = "markers")
+detach("package:plotly", unload = TRUE)
+```
+
+Typ a mód grafu dokáže funkcia *plot_ly* uhádnuť aj sama, ale zobrazuje o tom hlášky. 
+Paleta grafov (a ich nastavení) v *plotly* je obrovská - od základných a štatistických grafov, cez špecificky vedecké, finančnícke, geografické mapy až po 3D (body, povrch, vrstevnice). Pre podrobný prehľad odporúčam pozrieť https://plotly.com/r/. 
+
+### Iné 
+
+Na stránke https://www.htmlwidgets.org v sekcii *Showcase* nájdeme výber z rozsiahlej triedy *htmlwidgets*, rozsiahlejší zoznam zas v Galérii http://gallery.htmlwidgets.org/. Mnohé z nich sa spomínajú aj v časti *Interactive charts* na stránke https://www.r-graph-gallery.com/interactive-charts.html. Pre nás neskôr môžu byť užitočné napr. nasledujúce:
+
+__Graf časového radu__
+
+```{r }
+library(dygraphs)
+dygraph(nhtemp) %>% 
+  dyRangeSelector(dateWindow = c("1920-01-01", "1960-01-01"))
+detach("package:dygraphs", unload = TRUE)
+```
+
+__Mapy__ 
+
+```{r }
+library(leaflet)
+leaflet() %>%
+  addTiles() %>%  # defaultné OpenStreetMap mapové diely
+  addMarkers(lng=17.11526, lat=48.15198, popup="Stavebná fakulta STU")
+# možností je veľké množstvo, viac na http://rstudio.github.io/leaflet/
+detach("package:leaflet", unload = TRUE)
+```
+
+Výnimka medzi grafmi - interaktívna __tabuľka__
+
+```{r }
+library(DT)
+datatable(mtcars, options = list(pageLength = 5))
+detach("package:DT", unload = TRUE)
+```
+
+Otázka užitočnosti je však subjektívna, využiteľnosť si každý určí sám. Mnohé z grafov a widgetov sa môžu zísť vo výučbe, výskume i komerčných projektoch.
+
+
+## shiny    
+
+Widgety *htmlwidgets* sú mocným nástrojom a dajú sa ľahko zakomponovať do samostatných dokumentov. Ak však treba väčšiu flexibilitu a prispôsobiteľnosť užívateľským vstupom, je balík *shiny* [@chang2020shiny] rozumnejšou voľbou. Nevýhodou je, že kód už nedokáže vykonať iba samotný web browser a je potrebný aj beh vlastného servera.
+
+Použitie ilustrujeme pomocou datasetu *mpg* na príklade grafu závislosti zdvihového objemu *disp* a dojazdu mimo mesta *hwy* s odlíšením roku výroby modelu *year* pomocou priehľadnosti a druhu paliva *fl*^[Význam skratiek: c - CNG, d- diesel, e - ethanol (E85), p - premium (high octane), r - regular.] farebne (a názvom modelu namiesto bodu). Graf by bol pre všetkých 234 modelov áut neprehľadný, preto predpokladajme, že nás v jednom momente zaujímajú dáta iba jedného konkrétneho výrobcu *manufacturer*. Statický graf v rámci ggplot dostaneme nasledovne:
+
+```{r }
+library(ggplot2)
+mpg %>% 
+  dplyr::filter(manufacturer == "chevrolet") %>% 
+  ggplot(aes(x = displ, y = hwy, alpha = year, color = fl)) +
+  geom_text(aes(label = model), position="jitter") +
+  scale_alpha(range = c(0.4, 1))
+```
+
+Poloha je kvôli častým prekrytom zámerne trochu rozochvená (jitter) a spodná hranica priehľadnosti je pre dobrú viditeľnosť zvýšená. Ak by sme chceli zobraziť takéto grafy pre všetkých výrobcov, pomocou faceting-u by vzniklo 15 subgrafov. Nechajme radšej užívateľa, nech si výrobcu vyberie priamo z rolovacieho menu pri grafe:
+
+```{r shiny, eval=FALSE}
+library(shiny)
+# Užívateľské prostredie:
+ui <- fluidPage(    # použi fluid Bootstrap layout
+  # nadpis stránky
+  titlePanel("Mileage per galon related to displacement"),
+  # vytvor riadok s bočným panelom
+  sidebarLayout(      
+    # definuj bočný panel s jedným vstupom
+    sidebarPanel(
+      selectInput("manuf", "Manufacturer:", 
+                  choices=unique(mpg$manufacturer)),
+      hr(),  # horizontal rule
+      helpText("Data from ggplot2.")
+    ),
+    # vytvor miesto pre graf
+    mainPanel(
+      plotOutput("mileagePlot")  
+    )
+  )
+)
+# Server:
+server <- function(input, output) { # definuj server pre Shiny app
+  # zaplň miesto vytvorené pre graf
+  output$mileagePlot <- renderPlot({
+    mpg %>% 
+      dplyr::filter(manufacturer == input$manuf) %>% 
+      ggplot(aes(x = displ, y = hwy, alpha = year, color = fl)) +
+      geom_text(aes(label = model), position="jitter") +
+      scale_alpha(range = c(0.4, 1)) +
+      # aby nedochádzalo k zmene mierky pre rôzny subset údajov:
+      scale_x_continuous(limits = range(mpg$displ)) +  
+      scale_y_continuous(limits = range(mpg$hwy))
+  })
+}
+# Skombinovanie frontend-u a backendu-u.
+shinyApp(ui, server)  
+```
+
+
+Aplikácia vytvorí server, v ktorom beží jedna inštancia R-ka a výsledok zobrazí v záložke Viewer alebo externom internetovom prehliadači.
+
+Ak chceme svoju interaktívnu shiny aplikáciu poskytnúť iným ľuďom, ktorí nemajú Rko nainštalované, alebo ho nevedia obsluhovať, mǒžeme vytvoriť server prístupný pod verejnou IP adresou. Alebo použiť službu, ktorá to urobí za nás. Jednou z takých je https://www.shinyapps.io. Stačí sa zaregistrovať a po prihlásení nasledovať jednoduchý postup, ako načítať shiny aplikáciu na server. Účet zadarmo má obmedzenie na 5 aplikácií a ich behu 25 hodín/mesiac. Podrobná dokumentácia služby shinyapps.io sa nachádza na stránke https://docs.rstudio.com/shinyapps.io/.
+
+Horeuvedenú aplikáciu si môžete vyskúšať na adrese https://bacigal.shinyapps.io/shinyapp/. Aby som ju mohol uploadnuť, uložil som R-kovský sript do osobitného súboru *app.R* v adresári *shinyapp*, názvy si môžete zvoliť. Potom som nainštaloval balík *rsconnect*, nakonfiguroval ho poskytnutím tokenu a hesla (z účtu na shinyapps.io), načítal balík a uploadol aplikáciu na server (treba mať už správne nastavený pracovný adresár pomocou *setwd*): 
+
+```{r rsconnect, eval = FALSE}
+install.packages('rsconnect')
+rsconnect::setAccountInfo(name='bacigal',
+                          token='.................................',
+                          secret='.........................................')
+library(rsconnect)
+rsconnect::deployApp('shinyapp/')
+```
+
+V účte som nastavil timeout, po ktorom sa aplikácia po poslednom použití uspí, na 5min (štandardne je nastavené 15min), aby sa 25 hodinový limit minul čo najpomalšie.
+
+Viac o tvorbe Shiny aplikácií sa píše v oficiálnej dokumentácii na stránke https://shiny.rstudio.com/, detailnejšie v publikácii [@wickham2020mastering].
+
+## Interaktívna podpora tvorby grafov ggplot
+
+Interaktivita sa dá využiť aj na tvorbu statických grafov. Dobrým príkladom je balík *ggraptR* [@dubossarsky2020ggraptR], ktorý začiatočníkom veľmi výrazne uľahčuje tvorbu základných grafov (scatter, line, path, density 2D, bin 2D, hex) možnosťou nastavenia komponentov aesthetic, theme, facet a aggregation. Výsledný graf sa dá exportovať ako obrázok alebo  zdrojový script v R. Rovnako sa dajú tvoriť tabuľky súhrnov (napr. priemer podľ askupín), to žiaľ už nejde exportovať. Nasledujúcim príkazom sa spustí lokálny server a otvorí nové okno vo webovom prehliadači. Štandardne sa natiahne dataset *diamonds*, no nie je problém načítať akýkoľvek iný data frame. Pre stručný návod pozri vignette v prostredí R alebo na stránke https://cran.r-project.org/web/packages/ggraptR/vignettes/ggraptR.html.
+
+```{r ggraptR, eval = FALSE}
+ggraptR::ggraptR()
+```
+
+
+Alternatívou je add-in do RStudia, balík *esquisse*, ktorý sa po inštalácii spustí buď z ponuky alebo príkazom. Bližšie na stránke projektu https://dreamrs.github.io/esquisse/index.html.
+
+```{r esquisse, eval = FALSE}
+esquisse::esquisser()
+```
+
+
+
+## Cvičenie {#interaktivna-cvicenie}
+
+Pomocná nápoveda ku riešeniu je uvedená v zátvorke na konci úloh.
+
+1. Prvý príklad v kapitole o *ggvis* študijného materiálu upravte tak, aby sa body závislosti dojazdu od zdvihového objemu zafarbili podľa diskrétnej premennej, ktorú si používateľ interaktívne zvolí v rolovacom menu. Diskrétne premenné v *mtcars* predtým konvertujte na faktor. (*input_select*, `map=as.name`)
+
+2. Predošlý príklad implementujte pomocou ggplot ako aplikáciu Shiny: vľavo nech je rolovacie menu, vpravo graf a pod ním tabuľka priemerov oboch premenných v jednotlivých skupinách (interaktívne zvolenej) diskrétnej premennej. (funkcie *selectInput*, *plotOutput*, *tableOutput*, *aes_string*, *group_by_at* + *summarize*)
+
+3. Poskytnite aplikáciu z predošlého príkladu online (formou odkazu, napr. pomocou služby www.shinyapps.io). Ak sa vám predošlý príklad nepodarilo urobiť, poskytnite jednoduchú aplikáciu na výpočet mocniny čísla zadaného z textového poľa alebo niečo iné - originálne vaše.
+
+4. Pomocou *ggplot2* a *plotly* v interaktívnom bodovom grafe zobrazte závislosť dojazdu od zdvihového objemu s farebným odlíšením počtu valcov tak, aby tooltip obsahoval iba informáciu o modeli auta a súradniciach bodu. Vedeli by ste text tooltip-u formátovať tak, aby bol model auta prvý a hodnoty parametrov auta boli uvedené aj s jednotkami? (argument *tooltip*, aes *text*)
+
+5. Ktorý *htmlwidget* (zo všetkých dostupných) je pre vás zaujímavý a prečo?
+

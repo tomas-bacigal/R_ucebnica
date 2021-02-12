@@ -1,0 +1,316 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE
+)
+`%>%` <- magrittr::`%>%`
+```
+
+# Vizualizácia pomocou *ggplot2*
+
+R-ko má niekoľko systémov na vizualizáciu údajov, no *ggplot2* je jedným z najelegantnejších a veľmi všestranne použiteľný. Implementuje tzv. *grammar of graphics*, čo je premyslený systém popisu a výstavby grafov. Pred tým, než si ukážeme konkrétne príklady grafov ako pri prieskumnej analýze údajov, je vhodné pochopiť najprv filozofiu gramatiky grafov.
+
+Kapitola vznikla na podklade kníh [@wickham2016r, kapitola 3], [@ismay2019statistical, kapitola 2], [@peng2016exploratory, kapitoly 15 a 16] a [@wickham2016ggplot2].
+
+## Filozofia
+
+V skratke, gramatika nám hovorí, že:  
+
+> A statistical graphic is a *mapping* of *data* variables to *aes*thetic attributes of *geom*etric objects.
+ 
+Grafiku teda môžeme rozložiť na tri základné časti:
+
+1. *data* - súbor dát obsahujúci požadované premenné,
+2. *geom* - príslušný geometrický objekt, napr. body (points), línie (lines), stĺpce (bars),
+3. *aes* - estetické atribúty geometrického objektu, napr. x/y poloha, farba (color), tvar (shape), veľkosť (size), na ktoré sú "namapované" (zobrazené) premenné z datasetu.
+
+Najlepšie sa to pochopí na príklade. Vezmime pre zmenu súbor *mpg* z balíku ggplot2, ktorý obsahuje dáta o hospodárnosti využia paliva vybraných modelov automobilov z rokov 1999 - 2008. Medzi 11 premennými sa nachádza zdvihový objem *displ*  a spotreba paliva v meste *cty* (obe v litroch), počet valcov (*cyl*) a typ náhonu *drv* (predný _f_, zadný _r_, na všetky 4).
+
+```{r }
+library(ggplot2)
+head(mpg)
+ggplot(data = mpg, mapping = aes(x = displ, y = cty, size = cyl, color = drv)) +
+  geom_point()
+```
+
+Z pohľadu gramatiky:
+
+- premenná *displ* zo súboru *data* je namapovaná na *x*-ovú súradnicu bodov *points*
+- premenná *cty* zo súboru *data* je namapovaná na *y*-ovú súradnicu bodov *points*
+- premenná *drv* zo súboru *data* je namapovaná na veľkosť *size* bodov *points*
+- premenná *cyl* zo súboru *data* je namapovaná na farbu *color* bodov *points*
+
+Vidíme, že *data* zodpovedá konkrétnemu data frame, kde premenné štandardne zodpovedajú stĺpcom, ďalej typ *geom*etrických objektov sú body, ktoré sú zobrazené vo svojej vrstve (skúste spustiť iba prvú časť príkazu pred spojkou +).
+
+Okrem spomínaných troch zložiek grafickej gramatiky sú aj ďalšie:
+
+4. *facet* - rozdelenie jediného grafu do tabuľky viacerých grafov podľa hodnôt určitej premennej
+5. *position* - úprava polohy, napr. stĺpcov v stĺpcovom grafe alebo rozochvenie bodov v XY grafe
+6. *scale* - stupnica ktorú estetické mapovanie používa, napr. muž = modrá, žena = červená
+7. *coord* - súradnicový systém pre geometrické objekty
+8. *stat* - štatistická transformácia ako triedenie (binning), kvantily, vyhladzovanie a pod.
+
+Systematicky sa im venujú publikácie spomenuté v úvode kapitoly. Expresný tutoriál vizualizácie pomocou _ggplot2_, od statických grafov až po animácie, možno nájsť napr. na stránke https://djnavarro.github.io/satrdayjoburg/slides/#1  
+Prehľadne sú možnosti a voľby subsystému _ggplot2_ zosumarizované v ťaháku https://github.com/rstudio/cheatsheets/blob/master/data-visualization-2.1.pdf dostupnom aj z ponuky *Help > Cheatsheets* prostredia RStudio.  
+
+V ďalšej podkapitole si prejdeme tie najbežnejšie grafy, akými sú bodové, líniové, krabicové a stĺpcové grafy vrátane histogramu.
+
+## Príklady najčastejších grafov
+ 
+Niektoré grafy sú vhodné pre spojité, numerické náhodné premenné, iné pre diskrétne, kvalitatívne. Každé si ilustrujeme na zaujímavom datasete a ukážeme aj rôzne variácie. Začneme tými, ktoré zobrazujú vzájomný vzťah medzi numerickými premennými - bodové a líniové grafy.
+
+### Bodový graf
+
+Je to najjednoduchší graf pre vyjadrenie vzťahu dvoch kvantitatívnych náhodných premenných. Z datasetu *flights* (balík *nycflights13*, 336 776 odletov z New Yorku v roku 2013) použijeme premenné *dep_delay* (meškanie odletov, v minútach) a *arr_delay* (meškanie príletov) všetkých letov spoločnosti Alaska Airlines (spolu 714)
+
+```{r }
+alaska_flights <- nycflights13::flights %>% 
+  dplyr::filter(carrier == "AS")
+```
+
+a namapujeme ich na x-ovú a y-ovú polohu (súradnicu). Nakoniec pridáme vrstvu s bodmi (pre ušetrenie opätovného písania si základ grafu pred pridaním geometrickej vrstvy uložíme).
+
+```{r }
+g <- ggplot(data = alaska_flights, mapping = aes(x = dep_delay, y = arr_delay)) 
+g + geom_point()
+```
+
+Väčšina bodov je sústredná okolo počiatku (0,0), teda bodu indikujúceho žiadne meškanie, záporné hodnoty reprezentujú predčasné odlety/prílety. Varovná hláška vypísaná v konzole upozorňuje na 5 riadkov s chýbajúcou hodnotou pri aspoň jednom stĺpci, pri zobrazení boli vynechané.  Znak `+` vždy patrí na koniec riadku, po ňom sa kvôli prehľadnosti odporúča riadok zalomiť.  
+Body v mraku blízko (0,0) sa zjavne prekrývajú (overplotting) a tak je ťažké určiť ich počet. Riešením problému s prekrývaním je zvyčajne nastaviť priehľadnosť, alebo body jemne rozochvieť.
+
+```{r }
+g + geom_point(alpha = 0.2)
+```
+
+Koeficient nepriehľadnosti *alpha* nadobúda hodnoty od 0 po 1 (prednastavená hodnota). Všimnime si, že nie je obalený funkciou *aes*. To preto, že úroveň opacity sa tu nemení so žiadnou premennou, iba sme zmenili prednastavenú hodnotu. Druhá metóda, teda rozochvenie bodov tu nie je veľmi užitočná
+
+```{r }
+g + geom_point(position="jitter")  # alebo g + geom_jitter()
+```
+
+no môžeme si vyskúšať zmenu rozsahu rozochvenia.
+
+```{r }
+g + geom_jitter(width = 30, height=30)
+```
+
+Takýto rozsah šumu zjavne zhoršil informačnú kvalitu údajov.
+
+### Líniový graf
+
+Keď má vysvetľujúca (explanatory) premenná na osi *x* sekvenčný charakter (najčastejšie čas), na vyjadrenie jej vzťahu s premennou na osi *y* sa využíva líniový graf. Ilustrujeme ho na datasete *weather*, v ktorom premenná *temp* predstavuje hodinový záznam teploty (vo Fahrenheitoch) na meteostaniciach na troch hlavných letiskách New Yorku v roku 2013. Nás bude zaujímať iba letisko Newark (premenná *origin*, hodnota *EWR*) prvých 15 januárových dní. 
+
+```{r }
+data(weather, package = "nycflights13")
+weather %>% 
+  dplyr::filter(origin == "EWR" & month == 1 & day <= 15) %>% 
+  ggplot(mapping = aes(x = time_hour, y = temp)) + 
+  geom_line()
+```
+
+Vďaka pipe operátoru je súslednosť príkazov prehľadná: dátový rámec *weather* z balíka *nycflights13* je vo funkcii *filter* zbavený všetkých riadkov okrem tých, ktoré spĺňajú zadanú podmienku, takýto data frame  je následne zdrojom údajov pre funkciu *ggplot* aby mohla namapovať (zobraziť) časovú premennú na os *x* a teplotu na os *y*, a pridaním geometrickej vrstvy geom_line sa zobrazí graf časového radu.
+
+### Histogram
+
+Jedna spojitá premenná sa často zobrazuje prostredníctvom tabuľky početnosti jej hodnôt v jednotlivých intervaloch (*bins*). Grafická reprezentácia sa nazýva histogram.
+
+```{r }
+g <- ggplot(data = weather, mapping = aes(x = temp))
+g + geom_histogram()
+```
+
+Nastaviť sa dá napr. počet intervalov alebo ich šírka, a farba lemu či výplne stĺpcov, pridať môžeme aj vrstvu s kobercový grafom (*rug*).
+
+```{r }
+g + geom_histogram(bins = 40, color = "white")
+g + geom_histogram(binwidth = 10, color = "white", fill = "steelblue") +
+  geom_rug()
+```
+
+Koncept stránkovania pomocou komponentu *facet* umožní napr. rozdeliť histogram teploty podľa mesiacov (povedzme do 4 riadkov) a tak vidieť jej sezónny charakter.
+
+```{r }
+g + geom_histogram(binwidth = 5, color = "white") +
+  facet_wrap(vars(month), nrow = 4)
+```
+
+Samozrejme *faceting* sa dá skombinovať s akýmkoľvek druhom grafu.
+     
+### Krabicový a husľový graf
+
+Aby sme videli sezónnosť rozdelenia teploty, museli sme histogram rozdeliť do 12 okienok, čo nemusí byť vždy najprehľadnejší spôsob podania informácie. Krabicovým grafom sa to dá povedať zrozumiteľnejšie, prípadne aj so zobrazením vrstvy diskrétnych bodov pozorovaní (s rozochvenou polohou), treba len zabezpečiť, aby premenná *month* bola (pochopená ako) kategoriálna, preto je použitá aj funkcia factor(). 
+
+```{r }
+g <- ggplot(data = weather, mapping = aes(x = factor(month), y = temp))
+g + geom_boxplot() + geom_jitter(alpha = 0.1, size = 0.2)
+```
+
+Podobne sa vytvorí vrstva s husľovým grafom doplnený o hlavné kvartily.
+
+```{r }
+g + geom_violin(draw_quantiles = c(0.25,0.5,0.75)) 
+```
+
+   
+### Stĺpcový graf
+ 
+Okrem vizualizácie tabuľky početnosti jednej kategoriálnej premennej
+
+```{r }
+data(flights, package = "nycflights13")
+ggplot(data = flights, mapping = aes(x = carrier)) +
+  geom_bar(fill = "steelblue")
+```
+
+sa stĺpcové grafy používajú aj na vyjadrenie združeného rozdelenia dvoch kategoriálnych premenných. Odlíšme početnosti odletov jednotlivých dopravcov (*carrier*) podľa letiska (*origin*) farebnou výplňou (*fill*) stĺpcov. Všimnime si rozdielny kontext, v ktorom vystupuje parameter *fill* oproti predošlému grafu.
+
+```{r }
+g <- ggplot(data = flights, mapping = aes(x = carrier, fill = origin)) 
+g + geom_bar()
+```
+
+Pomer (proportion) odletov medzi letiskami sa ľahšie identifikuje z relatívnych početností
+
+```{r }
+g + geom_bar(position = "fill")
+```
+
+Alternatívou ku vertikálnemu naskladaniu stĺpcov (*stack*) je zobraziť ich vedľa seba (*dodge*).
+
+```{r }
+g + geom_bar(position = "dodge")
+```
+
+Možnosti ggplot týmto ani zďaleka nekončia, grafy sa dajú rôzne dolaďovať, napr. ak nám nevyhovuje vyplnenie prázdneho miesta (pri nulovej početnosti) ostatnými stĺpcami v predošlom grafe (nad dopravcami AS, F9 ...), použijeme vylepšenie:
+
+```{r }
+g + geom_bar(position = position_dodge(preserve = "single"))
+```
+
+Môžeme napr. meniť súradnicový systém výmenou osí a pridať popis grafu a osí
+
+```{r }
+g + geom_bar() + coord_flip() + 
+  labs(x = "prepravca", y = "počet", title = "Odlety z New Yorku")
+```
+
+alebo namiesto karteziánskeho použiť polárny súradnicový systém a zmeniť celkovú tému:
+
+```{r }
+g + geom_bar() + coord_polar() + theme_minimal()
+```
+
+Ďalšie detaily možno rýchlo nájsť v nápovede, v ťaháku alebo v spomínanej literatúre.
+ 
+## Špeciálne grafy
+
+Z ďalších komponentov sa s výhodou dá použiť *geom_polygon* pre zobrazenie geo-priestorovej informácie. Napr. vykreslenie mapy s popisom zaberie zopár riadkov kódu, najprv potrebujeme polohové údaje o hraniciach z balíku *maps* (stačí nainštalovať) a následne každú skupinu (group) vrcholov vykresliť ako polygón (geom_polygon)
+
+```{r }
+dat_world_map <- map_data("world")
+dat_world_map[9:13,]  # pohľad na údaje
+ggplot(dat_world_map, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill="lightgray", colour = "white") + 
+  coord_fixed(ratio = 1.3)  # optimálny pomer osí pre mapy malej mierky
+```
+
+Jednotlivé štáty môžeme vyfarbiť rôznou farbou. Keďže obyčajné `mapping = aes(fill=region)` by zvolilo nevhodnú paletu farieb, radšej použijeme tú z balíka *viridis* (opäť si ju ggplot2 importuje sám). Zazoomujeme na Európu, vyberieme zopár krajín EU a namiesto legendy zobrazíme textové popisky regiónov priamo do stredu polygónov:
+
+```{r }
+someEU_countries <- c(
+  "Portugal", "Spain", "France", "Switzerland", "Germany",
+  "Austria", "Belgium", "UK", "Netherlands",
+  "Denmark", "Poland", "Italy", 
+  "Croatia", "Slovenia", "Hungary", "Slovakia",
+  "Czech republic"
+)
+dat_someEU_map <- map_data("world", region = someEU_countries)
+dat_someEU_labels <- dat_someEU_map %>%
+  dplyr::group_by(region) %>%
+  dplyr::summarise(long = mean(long), lat = mean(lat))
+head(dat_someEU_labels, 3)
+ggplot(dat_someEU_map, aes(x = long, y = lat)) +
+  geom_polygon(aes( group = group, fill = region)) +
+  geom_text(aes(label = region), data = dat_someEU_labels,  size = 3, hjust = 0.5) +
+  scale_fill_viridis_d(alpha=0.5) +  # priehladnost (alpha) zjemni farby
+  coord_fixed(ratio = 1.3) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+Farby však môžu vyjadrovať aj dôležitú informáciu, v nasledujúcom príklade je to aktuálne rozšírenie koronavírusu v jednotlivých krajinách sveta.
+
+```{r eval=FALSE}
+# načítať súbor priamo
+ url_corona <- "https://datahub.io/core/covid-19/r/countries-aggregated.csv"
+ dat_corona <- read.csv(file = url(url_corona))
+# alebo najprv stiahnuť a potom načítať lokálne
+# download.file(url = url_corona, destfile = "corona.csv")
+#dat_corona <- read.csv(file = "corona.csv")
+```
+```{r include = FALSE}
+#setwd("/media/tomas/SAM32/documents/math/edu/R_textbook")
+#readr::write_csv(dat_corona, path = "data/countries-aggregated.csv")
+dat_corona <- readr::read_csv(file = "data/countries-aggregated.csv")
+```
+
+```{r}
+ tail(dat_corona, 3)
+```
+
+V súbore údajov dat_world_map sú teda uložené geolokačné údaje a v dat_corona sú údaje o počte potvrdených prípadov nákazy, počte vyliečených a počte obetí každý deň od 22.1.2020. Keďže nás zaujíma aktuálna situácia, zvolíme konkrétny deň. Pred zobrazením v jednom grafe je potrebné oba súbory zlúčiť (*dplyr::full_join*) do jedného podľa spoločného znaku, tu podľa krajiny. Prekážkou je, že názvy niektorých krajín sa medzi súbormi líšia, napr. "US" a "USA" (skúste napr. `setdiff(unique(dat_world_map$region), dat_corona$Country)`) a v mape by sa prejavila ako prázdne miesta. Túto nekonzistentnosť v dátových podkladoch sa dá vyriešiť štandardizáciou názvov napr. pomocou balíku *countrycode*, ktorý viac-menej automaticky rozpozná názov krajiny a vráti všeobecne platný názov, napr. 'United States'. Krajiny, ktoré sa mu nepodarí rozpoznať, vypíše vo varovnej hláške, v našom prípade ide o pomerne exotické a rozlohou zanedbateľné krajiny.
+
+```{r }
+dat_corona <- dat_corona %>% 
+  dplyr::filter(Date == "2020-12-26") %>% 
+  dplyr::mutate(Country = countrycode::countrycode(
+    sourcevar = Country, origin = 'country.name', destination = 'country.name')
+    )
+dat_world_map <- dat_world_map %>% 
+  dplyr::mutate(region = countrycode::countrycode(
+    sourcevar = region, origin = 'country.name', destination = 'country.name')
+    )
+```
+
+Po zlúčení, pričom identifikátorom je názov krajiny, sa počet nakazených ľudí (*Confirmed*) namapuje na farbu výplne (*fill*) mnohouholníkov na stupnicu (gradient) v logaritmickej mierke (aby sa dali rozoznať rozdiely v krajinách s nízkou početnosťou nakazených) .
+
+```{r }
+p <- dplyr::full_join(x = dat_corona, y = dat_world_map, 
+                      by = c("Country" = "region")) %>% 
+  ggplot(mapping = aes(x = long, y = lat, group = group)) +
+  geom_polygon(mapping = aes(fill = Confirmed)) + 
+  scale_fill_gradient(trans = "log10", low = "white", high = "red") + 
+  coord_fixed(ratio = 1.3) 
+p
+```
+
+Takýto graf sa nazýva *choropleth chart*. Šedé zóny predstavujú regióny, pre ktoré nie sú dostupné informácie o šírení choroby COVID-19. Ideálne by bolo zobraziť hustotu nákazy (podiel prípadov nákazy na celú populáciu), prípadne rozdeliť väčšie krajiny na subregióny, no to si vyžaduje import ďalších údajov.  
+Zoomovanie na oblasť, ktorá nás zaujíma, je s ggplot jednoduché, a to dvoma spôsobmi:
+
+```{r }
+p + coord_fixed(xlim = c(-10,40), ylim = c(30,70), ratio=1.3)
+p + xlim(-10,40) + ylim(30,70)
+```
+
+Viete vysvetliť rozdiel?  
+Ako by ste zvýraznili hranice štátov?  
+  
+Ďalšiu inšpiráciu na tvorbu mapových grafov možno nájsť napr. na   
+https://eriqande.github.io/rep-res-web/lectures/making-maps-with-R.html  
+https://www.earthdatascience.org/courses/earth-analytics/spatial-data-r/make-maps-with-ggplot-in-R/  
+
+*Záverečná poznámka:*  
+Už samotný balík *ggplot2* ponúka veľa rôznych druhov grafov, no vďaka svojmu frameworku umožnil ďalším balíkom pomerne jednoducho priniesť do "ekosystému" ešte väčšie množstvo špecializovaných grafov, stačí si pozrieť ukážky na stránke https://www.r-graph-gallery.com
+
+ 
+
+## Cvičenie {#vizualizacia-cvicenie}
+
+1. Načítajte data frame *Cars93* z balíka *MASS*.
+2. Odfiltrujte všetkých neamerických výrobcov a zobrazte histogram pre cenu automobilu s rozdelením do približne 5 kategórií.
+3. Zobrazte závislosť dojazdu v meste od zdvihového objemu s veľkosťou bodov podľa hmotnosti, tvarom bodov podľa typu vozidla a farbou podľa počtu valcov, pričom grafická informácia bude rozdelená do troch grafov pod sebou podľa typu náhonu (*DriveTrain*).
+4. Zobrazte časový rad vývoja počtu potvrdených prípadov choroby COVID-19 v krajinách V4 odlíšených farebne. Postup príkazov (tip v zátvorke):
+   1. načítať *dat_corona* z "https://github.com/datasets/covid-19/raw/master/data/countries-aggregated.csv" (alebo iného dostupného datasetu obsahujúceho stĺpce Date, Country, Confirmed),
+   2. zmeniť premennú Date z typu factor/character na typ date, (*as.Date*)
+   3. filtrom prepustiť len 4 krajiny a obmedziť začiatok časového radu na 1.9.2020,  (*filter*, `%in%`)
+   4. zobraziť premennú *Date* na os *x*, *Confirmed* na os *y*, *Country* na *group* a *color* a pridať líniový komponent.
+5. Experimentálne zobrazte iný typ grafu, než aké boli prebraté, či už o jednej, dvoch alebo troch premenných a vysvetlite, čim je zaujímavý.

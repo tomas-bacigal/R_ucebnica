@@ -1,0 +1,529 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  out.width = '50%',
+  fig.align = 'center'
+)
+pdf.options(encoding = 'ISOLatin2')
+```
+
+# Riešenie úloh z cvičení
+
+
+## [Úvod do R](#uvod-cvicenie)
+
+
+  1.
+```{r}
+dat <- datasets::mtcars
+```
+  2.
+```{r}
+str(dat)
+head(dat)
+```
+  3.
+```{r}
+dat$kml <- dat$mpg * 0.425144
+```
+  4.
+```{r}
+aut <- dat$am == 0
+c(automat = mean(dat$kml[aut]), 
+  manual = mean(dat$kml[!aut])
+)
+```
+  5.
+```{r}
+subset(dat, subset = gear==5 & wt<3, select = c(cyl, disp, hp))
+```
+  6.
+```{r}
+convert <- function(x, impunit = c("mile", "gallon", "inch", "pound"), toSI = TRUE) {
+  p <- toSI*2 - 1
+  const <- switch(impunit[1],
+                  mile = 1.609,
+                  gallon = 3.785,
+                  inch = 0.254,
+                  pound = 0.453592
+  )
+  x * const^p
+}
+# Súčasťou definície novej funkcie by mal byť aj príklad jej použitia:
+convert(4, "inch")
+convert(1.016, "inch", toSI = FALSE)
+```
+  7.  
+Pomocou klasického príkazu for:
+```{r}
+tmp <- numeric(length = nrow(dat))  # vytvorenie prázdneho vektora
+for (i in 1:nrow(dat)) {
+  tmp[i] <- convert(dat[i,"disp"]^(1/3), "inch")^3
+}
+rm(i)  # for vytvorí pomocnú indexovú premennú i ako globálnu, odporúčam upratať
+tmp  # výsledok
+```
+Elegantnejšie a rýchlejšie pomocou sapply:
+```{r}
+sapply(dat$wt, convert, impunit = "pound")
+```
+```{r eval=FALSE}
+# alternatívne:
+#+ eval=F 
+sapply(dat$wt, function(x) convert(x, impunit = "pound"))
+```
+Ak je funkcia už vektorizovaná, netreba používať funkcie pre cykly. Vektorizovať sa dá napr. pomocou funkcie *Vectorize*, alebo vhodnou konštrukciou funkcie pomocou už vektorizovaných funkcií. Tak bola vytvorená napr. aj naša funkcia *convert*, preto nasledujúci príkaz tiež funguje.
+```{r eval=FALSE}
+convert(dat$wt, impunit = "pound")
+```
+  8. 
+```{r eval=FALSE}
+setwd("/media/tomas/SAM32/documents/math/edu/R_ucebnica")
+```
+
+
+```{r}
+datRT <- read.table("data/mtcars.txt", header = T, skip = 2, dec=",", sep = "",
+                    na.strings = "?")
+all.equal(target = datRT, current = dat)
+```
+Tým, že sme do *dat* pridali stĺpec *kml*, líšia sa šírkou (Length mismatch). V stĺpci *vs* sú v cieľovom (target) objekte 2 chýbajúce hodnoty (NA).
+
+
+
+## [Základné nástroje na prieskumnú analýzu](#zakladne-cvicenie)
+
+
+1. 
+```{r}
+data(Cars93, package = "MASS")
+```
+```{r eval=FALSE}
+? Cars93
+```
+```{r}
+summary(Cars93)
+```
+Súbor údajov o 93 autách predávaných v USA v roku 1993 obsahuje 93 riadkov a 27 stĺpcov, väčšina premenných (stĺpcov) ako napr. cena Price je kvantitatívnych (numerických), niektoré sú kvalitatívne, napr. výrobca Manufacturer. Podľa toho je zostavený súhrn funkciou summary. Iný súhrn ponúka napr.
+
+2. 
+```{r}
+priceUSA <- subset(Cars93, subset = Origin=="USA", select = Price, drop=T)
+hist(priceUSA)
+summary(priceUSA)
+```
+Rozdelenie je asymetrické, pravdepodobnejšie (častejšie) sú lacnejšie autá. Preto je medián (16 300\$) menší ako priemerná hodnota (18 570\$)
+
+3. 
+```{r}
+pocetnostManuf <- sort(table(Cars93$Manufacturer), decreasing=T)
+barplot(pocetnostManuf, las=2, cex.names=0.7)
+pie(pocetnostManuf,cex=0.7)
+dotchart(pocetnostManuf, cex=0.7)
+```
+   
+Najprehľadnejší je asi stĺpcový graf, prípadne aj bodový graf. Koláčový graf sa hodí na zobrazenie podielu nanajvýš zopár skupín. (Ľudský mozog nie je veľmi dobrý v rozlišovaní rozdielov v kruhových výsekoch, ľahšie vníma rozdiely obdĺžnikových tvarov.)
+
+4.
+```{r}
+plot(Price ~ AirBags, data=Cars93)
+```
+   
+Jednoznačne cena rastie s výbavou.
+
+5.
+```{r}
+plot(Horsepower ~ EngineSize, data=Cars93, col = Cars93$Origin, pch=20)
+legend("bottomright", legend = levels(Cars93$Origin), col = 1:2, pch = 20)
+```
+    
+Vyzerá to, že neamerické modely dosahujú pri rovnakom zdvihovom objeme vyšší výkon ako americké a rozdiel sa s objemom zvyšuje.
+  
+6. 
+```{r}
+Cars93$Type <- factor(
+  x = Cars93$Type, 
+  levels = c("Small", "Sporty", "Compact", "Midsize", "Large", "Van")
+  )
+# alternatívne (automatické zoradenie tried podľa priemernej hmotnosti):
+# priem <- aggregate(Weight ~ Type, data = Cars93, FUN = mean)
+# Cars93$Type <- factor(Cars93$Type, levels = priem$Type[order(priem$Weight)])
+mosaicplot(Type ~ Man.trans.avail, data=Cars93)
+```
+   
+Dostupnosť manuálnej prevodovky je doménou menších, kompaktných áut.
+
+   
+  
+## [Transformácia údajov a súhrny pomocou *dplyr*](#transformacia-cvicenie)
+
+
+1.
+```{r}
+data(Cars93, package = "MASS")
+```
+2.
+```{r}
+library(dplyr)
+auta93 <- select(Cars93, 1:3, contains("Price"), -contains(".Price"), starts_with("MPG"), AirBags:Horsepower, - DriveTrain, Weight, Origin)
+```
+3.
+```{r}
+auta93 %>% 
+  rename(CylindersVolume = EngineSize) %>% 
+  mutate(Weight = Weight * 0.4536) %>% 
+  filter(Weight < 1200 & Origin == "USA") %>% 
+  arrange(Type, Price) %>% 
+  print() %>% 
+  group_by(Type) %>% 
+  summarise(mean = mean(MPG.city), .groups = "drop")
+detach("package:dplyr", unload = TRUE)
+```
+
+
+
+## [Vizualizácia pomocou *ggplot2*](#vizualizacia-cvicenie)
+
+
+
+1.
+```{r}
+data(Cars93, package = "MASS")
+```
+2.
+```{r}
+`%>%` <- magrittr::`%>%`
+library(ggplot2)
+Cars93 %>% 
+  dplyr::filter(Origin == "USA") %>% 
+  ggplot(aes(x = Price)) + geom_histogram(bins = 5)
+```
+3.
+```{r}
+ggplot(Cars93) + 
+  aes(x = EngineSize, y = MPG.city, size = Weight, shape = Type, color = Cylinders) + 
+  geom_point() + 
+  facet_grid(rows = vars(DriveTrain))
+```
+4.
+```{r}
+"https://datahub.io/core/covid-19/r/countries-aggregated.csv" %>% 
+  url() %>% 
+  read.csv() %>%  
+  dplyr::mutate(Date = as.Date(Date)) %>% 
+  dplyr::filter(Country %in% c("Czechia", "Hungary", "Poland", "Slovakia"), 
+         Date > "2020-09-01") %>% 
+  ggplot(aes(x = Date, y = Confirmed, group = Country, color = Country)) + 
+  geom_line()
+```
+
+
+
+## [Čistenie údajov pomocou *tidyr*](#cistenie-cvicenie)
+
+
+
+1.
+```{r}
+head(USArrests)
+```
+```{r eval=FALSE}
+? USArrests
+```
+Druh zločinu predstavujú stĺpce _assault_ (napadnutie), _murder_ (vražda), _rape_ (znásilnenie).
+
+2.
+```{r}
+`%>%` <- magrittr::`%>%`
+library(ggplot2)
+
+USArrests %>% 
+  dplyr::mutate(state = rownames(.)) %>% 
+  tidyr::pivot_longer(cols = c(Assault,Murder,Rape), 
+                      names_to = "crime", values_to = "cases") %>% 
+  ggplot(mapping = aes(x = UrbanPop, y = cases, color = crime)) + 
+  geom_point() + scale_y_log10()
+```
+
+3.
+```{r}
+USArrests %>% 
+  dplyr::mutate(state = rownames(.)) %>% 
+  tidyr::pivot_longer(cols = c(Assault, Murder, Rape), 
+                      names_to = "crime", values_to = "cases") %>% 
+  ggplot(mapping = aes(x = UrbanPop, y = cases, color = crime)) + 
+  geom_text(mapping = aes(label = state), size = 2, check_overlap = F) +
+  facet_grid(rows = vars(crime), scales = "free_y")
+```
+
+4.
+```{r}
+dat <- tidyr::tibble(x = c("8,8,3", "2,4,9", "5,6"))
+```
+
+      a)  
+```{r}
+dat %>%
+  tidyr::separate(x, into = c("pred","počas","po"), sep = ",") %>%
+  dplyr::mutate(meno = c("Adam","Bibiana","Cindy")) %>%
+  tidyr::pivot_longer(cols = c(pred,počas,po), names_to = "test", values_to = "body") %>%
+  dplyr::mutate(body = as.numeric(body),
+                test = factor(test, levels = c("pred","počas","po"))) %>%
+  ggplot(aes(x = test, y = body, group = meno, color = meno)) + 
+  geom_point() + geom_line() +
+  labs(y = "počet bodov", title = "Výsledky študentov v kurze")
+```
+
+      b)  
+Z grafu vidieť, že Adam sa ulieval, na začiatku aj počas kurzu mal 8 bodov, ale po kurze už iba 3. Naopak, Bibi sa snažila, pred kurzom mala iba 2 body a po kurze až 9. O Cindy vieme povedať len to, že sa snažila zo začiatku testu, nepoznáme jej údaj z posledného testu.  ```
+
+      c)  
+Do funkcie separate by sme doplnili argument `fill = "left"`.
+```{r}
+dat %>%
+  tidyr::separate(x, into = c("pred","počas","po"), sep = ",", fill = "left") %>%
+  dplyr::mutate(meno = c("Adam","Bibiana","Cindy")) %>%
+  tidyr::pivot_longer(cols = c(pred,počas,po), names_to = "test", values_to = "body") %>%
+  dplyr::mutate(body = as.numeric(body),
+                test = factor(test, levels = c("pred","počas","po"))) %>%
+  ggplot(aes(x = test, y = body, group = meno, color = meno)) + 
+  geom_point() + geom_line() +
+  labs(y = "počet bodov", title = "Výsledky študentov v kurze")
+```
+
+
+## [Interaktívna vizualizácia](#interaktivna-cvicenie)
+
+
+
+1.
+```{r}
+`%>%` <- magrittr::`%>%`
+```
+```{r eval=F}
+mtcars %>%
+  dplyr::mutate(cyl = as.factor(cyl)) %>% 
+  ggvis::ggvis(x = ~disp, y = ~mpg) %>%
+  ggvis::layer_points(fill = ggvis::input_select(c("cyl", "am"), map=as.name, label = "farba:"))
+```
+
+2.
+```{r}
+library(ggplot2)
+```
+```{r eval=F}
+library(shiny)
+# Užívateľské prostredie:
+ui <- fluidPage(    # použi fluid Bootstrap layout
+  # nadpis stránky
+  titlePanel("Závislosť dojazdu od zdvihového objemu"),
+  # vytvor riadok s bočným panelom
+  sidebarLayout(      
+    # definuj bočný panel s jedným vstupom
+    sidebarPanel(
+      selectInput("var3", "Faktor:", 
+                  choices = c("cyl", "am")
+      )
+    ),
+    # vytvor miesto pre graf a tabuľku
+    mainPanel(
+      plotOutput("mileagePlot"),
+      helpText("Priemer v skupine:"),
+      tableOutput("summaryTable")
+    )
+  )
+)
+# Server:
+server <- function(input, output) { # definuj server pre Shiny app
+  # zaplň miesto vytvorené pre graf a tabuľku
+  output$mileagePlot <- renderPlot({
+    mtcars %>%
+      dplyr::mutate(cyl = factor(cyl)) %>% 
+      ggplot(aes(x = disp, y = mpg)) + 
+      geom_point(aes_string(color = input$var3))
+  })
+  output$summaryTable <- renderTable({
+    mtcars %>% 
+      dplyr::group_by_at(input$var3) %>% 
+      dplyr::summarize(disp = mean(disp), mpg = mean(mpg), .groups = "drop")
+  })
+}
+# Skombinovanie frontend-u a backendu-u.
+shinyApp(ui, server)
+# uvoľnenie nepotrebných knižníc
+detach("package:shiny")
+```
+
+4. 
+```{r eval=knitr::is_html_output()}
+p <- mtcars %>%
+  dplyr::mutate(cyl = as.factor(cyl), model = rownames(.)) %>% 
+  ggplot(aes(x = disp, y = mpg, color = cyl, label = model)) 
+plotly::ggplotly(p + geom_point(), tooltip=c("label", "x", "y"))
+plotly::ggplotly(p + geom_point(aes(text = paste(model,"\ndojazd: ", mpg, "mile/gal"))),
+                 tooltip = c("text")
+)
+```
+
+
+
+
+## [Efektívne programovanie](#efektivne-cvicenie) 
+
+1.
+```{r}
+multiodhadLM_p <- function(data, N) {
+  mat <- as.matrix(data)
+  estimLM <- function(i) {
+    Ys <- mat[i,]
+    X <- cbind(1, Ys[,1])
+    c( solve(t(X) %*% X) %*% t(X) %*% Ys[,2] )
+  }
+  n <- nrow(mat)
+  ind <- replicate(N, sample(n, n, replace=TRUE))
+  cl <- parallel::makeCluster(3)
+  parallel::clusterExport(cl, varlist = "mat", envir = environment())
+  out <- parallel::parApply(cl, X = ind, MARGIN = 2, FUN = estimLM)
+  parallel::stopCluster(cl)
+  out
+}
+system.time(sim <- multiodhadLM_p(mtcars[c("wt","disp")], 5000))["elapsed"]
+apply(sim, MARGIN = 1, quantile, probs = c(0.025, 0.975))
+```
+
+2.
+```{c eval=FALSE}
+// obsah súboru median.cpp
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+NumericVector sort_C(NumericVector x) {
+  int n = x.size();
+  double xi;
+  for(int i = 0; i <= n-2; ++i) {
+    for(int j = i+1; j <= n-1; ++j) {
+      xi = x[i]; 
+      if (x[j] < xi) {
+        x[i] = x[j];
+        x[j] = xi;
+      }
+    }
+  }
+  return x;
+}
+
+// [[Rcpp::export]]
+double median_C(NumericVector x) {
+  int n = x.size();
+  NumericVector y = sort_C(x);
+  int i = floor(n/2);
+  double out;
+  if (n % 2 == 0) {
+    out = (y[i-1]+y[i])/2;
+  } else {
+    out = y[i];
+  }
+  return out;
+}
+```
+```{r eval=FALSE}
+Rcpp::sourceCpp(file = "median.cpp")
+```
+
+```{r include=FALSE}
+Rcpp::sourceCpp(code = "
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+NumericVector sort_C(NumericVector x) {
+  int n = x.size();
+  double xi;
+  for(int i = 0; i <= n-2; ++i) {
+    for(int j = i+1; j <= n-1; ++j) {
+      xi = x[i]; 
+      if (x[j] < xi) {
+        x[i] = x[j];
+        x[j] = xi;
+      }
+    }
+  }
+  return x;
+}
+
+// [[Rcpp::export]]
+double median_C(NumericVector x) {
+  int n = x.size();
+  NumericVector y = sort_C(x);
+  int i = floor(n/2);
+  double out;
+  if (n % 2 == 0) {
+    out = (y[i-1]+y[i])/2;
+  } else {
+    out = y[i];
+  }
+  return out;
+}
+")
+```
+```{r}
+sort_C(16:11)
+median_C(16:11)
+```
+
+Funkcia *sort_C* sa dá nahradiť napr. preusporiadaním kópie vstupného vektora pomocou *std::sort*.
+
+```{r eval=FALSE}
+Rcpp::cppFunction(code = "double median_C(NumericVector x) {
+  int n = x.size();
+  NumericVector y = clone(x);
+  std::sort(y.begin(), y.end());
+  int i = std::floor(n/2);
+  double out;
+  if (n % 2 == 0) {
+    out = (y[i-1]+y[i])/2;
+  } else {
+    out = y[i];
+  }
+  return out;
+}")
+```
+Úplne najjednoduchšie je osladiť si život pomocnými funkciami, ktoré prostrediu C++ balík *Rcpp* sprístupňuje z prostredia R.
+```{r eval=FALSE}
+Rcpp::cppFunction(code = "double median_C(NumericVector x) {
+  return median(x); 
+}")
+```
+
+
+3.
+
+Ulož dáta do csv súborov:
+```{r eval=FALSE}
+write.table(nycflights13::flights, file = "data/nycflights13_flights.csv", 
+            sep = ",", row.names = FALSE)
+write.table(nycflights13::planes, file = "data/nycflights13_planes.csv", 
+            sep = ",", row.names = FALSE)
+```
+Zapíš súbory do databázy. Externým súborom by sa nemuseli vytvoriť tabuľky so správnym formátom polí, napr. by všetky boli textové a bolo by potrebné ich typ manuálne meniť, alebo neskôr pri filtrovaní používať textové hodnoty, napr. day == "1".
+```{r eval=FALSE}  
+con <- DBI::dbConnect(drv = RSQLite::SQLite(), dbname = "data/nycflights13.db")
+DBI::dbWriteTable(conn = con, name = "Flights", value = "data/nycflights13_flights.csv", overwrite=T)
+DBI::dbWriteTable(conn = con, name = "Planes", value = "data/nycflights13_planes.csv", overwrite=T)
+dplyr::tbl(con, from = "Flights")
+DBI::dbDisconnect(con)
+```
+Vytvor nové spojenie, zlúč tabuľky a vykresli:
+```{r eval=FALSE}  
+nycflights13_con <- DBI::dbConnect(drv = RSQLite::SQLite(), dbname = "data/nycflights13.db")
+dplyr::tbl(nycflights13_con, from = "Flights") %>% 
+  dplyr::filter(month == 1, day == 1, dep_time > 500 & dep_time < 800) %>% 
+  dplyr::select(tailnum, origin) %>% 
+  dplyr::left_join(y = dplyr::tbl(nycflights13_con, from = "Planes"), 
+                   by = "tailnum") %>% 
+  dbplot::dbplot_histogram(x = seats, bins = 10)
+DBI::dbDisconnect(nycflights13_con)
+```
+Filtrovanie sa dá vykonať aj po zlúčení tabuliek, ale je to menej efektívne.  
+Aby sa dali použiť pokročilejšie funkcie ggplot2, napr. vykreslenie po skupinách (group, colour), je pravdepodobne potrebné stiahnuť zobrazované údaje lokálne, a použiť ggplot2::ggplot namiesto dbplot.

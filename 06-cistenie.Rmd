@@ -1,0 +1,305 @@
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  out.width = '70%',
+  fig.align = 'center'
+)
+pdf.options(encoding = 'ISOLatin2')
+`%>%` <- magrittr::`%>%`
+```
+
+# Čistenie údajov pomocou *tidyr*
+
+Kapitola je spracovaná prevažne s použitím [@wickham2016r, kapitola 12], doplnkovo [@ismay2019statistical, kapitola 4] a stránky projektu [Statistical tools for high-throughput data analysis](http://www.sthda.com/english/wiki/tidyr-crucial-step-reshaping-data-with-r-for-easier-analyses).
+
+
+## Všeobecne
+
+To, ako vyzerajú čisté údaje, už bolo spomenuté: každá premenná má svoj stĺpec, každé pozorovanie je vo svojom riadku a každá hodnota má svoju bunku v tabuľke. Zatiaľ čo čisté dáta sú všetky rovnako čisté, tie neporiadne sú neporiadne svojim vlastným spôsobom. Výhoda čistých údajov spočíva -- podobne ako pri iných štandardoch -- v dostupnosti väčšieho počtu a ľahšie pochopiteľných nástrojov na prácu s dátami. Príkladom v prostredí R je *tidyverse* -- celý ekosystém balíkov, do ktorého patria aj
+
+- *tibble* - vylepšená koncepcia dátových rámcov a metód manipulácie s nimi
+- *readr* - rýchly a priateľský spôsob importu tabuľkových údajov (prednostne do formátu tibble)
+- *tidyr* - nástroje na vytvorenie čistých dát z tých neporiadnych [@wickham2020tidyr]
+- *dplyr* - gramatika manipulácie s dátami
+- *ggplot2* - vizualizáčný systém založený na gramatike grafiky
+- *purrr* - konzistentný súbor nástrojov funkcionálneho programovania
+- *stringr* - súbor nástrojov uľahčujúci prácu so znakovými reťazcami
+
+Pre ilustráciu, nasledujúca tabuľka je čistá:
+
+```{r }
+library(tidyr)
+table1
+```
+
+Vďaka tomu je manipulácia s premennými veľmi jednoduchá. Napríklad jednoducho sa dá vyjadriť podiel pozitívnych prípadov v celej populácii,
+
+```{r }
+table1 %>% 
+  dplyr::mutate(rate = cases / population * 10000)
+```
+
+zhrnúť počet prípadov po jednotlivých rokoch,
+
+```{r }
+table1 %>% 
+  dplyr::count(year, wt = cases)
+```
+
+alebo zobraziť vývoj v jednotlivých krajinách.
+
+```{r }
+library(ggplot2)
+ggplot(table1, aes(year, cases)) + 
+  geom_line(aes(group = country), colour = "grey50") + 
+  geom_point(aes(colour = country))
+```
+
+Hoci sa zdá, že princípy poriadku v tabuľkových dátach sú zjavné a príde nám divné, prečo by dáta v praxi mali vyzerať inak, opak je realitou. Väčšia časť zaznamenaných údajov nie je v poriadku a to najmä preto, že 
+
+  - väčšina ľudí nie je oboznámená/zžitá s princípmi čistých údajov a je ťažké k nim prirodzene dôjsť, kým človek s dátami nestrávi už skutočne veľa času,
+  - dáta sú často organizované pre úplne iný účel než analýzu.
+
+To znamená, že pre seriózne analýzy bude treba nejaké to čistenie. Prvý krok je vždy rozpoznať, čo sú premenné a čo pozorovania. Niekedy je to ľahké, niekedy si to vyžaduje konzultáciu s tvorcami datasetu. Druhý krok je vyriešiť jeden z dvoch bežných problémov (iba zriedka oboch naraz):
+
+  1. Jedna premenná je roztiahnutá cez viacero stĺpcov.
+  2. Jedno pozorovanie je rozstratené po viacerých riadkoch.
+
+Na vyriešenie týchto dvoch problémov budú potrebné dve kľúčové funkcie balíku *tidyr*: *pivot_longer* a *pivot_wider*. (Slovo *pivoting* sa dá preložiť ako otáčanie.)
+
+## Zber stĺpcov
+
+V prvom probléme sa deje to, že názvy niektorých stĺpcov v tabuľke v skutočnosti nepredstavujú názvy premenných ale *hodnoty* nejakej premennej. Napr. v tabuľke
+
+```{r }
+table4a
+```
+
+sú názvy druhého a tretieho stĺpca hodnotami premennej (nazvime ju) *year*, pričom hodnoty v bunkách týchto stĺpcov sú počty pozitívnych prípadov (*cases*). Cieľom je vytvoriť stĺpce pre tieto dve nové premenné, naplniť ich hodnotami (roky a počty prípadov) a staré stĺpce zmazať.
+
+```{r }
+table4a <- table4a %>% 
+  pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "cases")
+table4a
+```
+
+S tabuľkou 4a súvisí table4b ktorá namiesto počtu pozitívnych prípadov obsahuje celkový počet v populácii. Najprv si ju zobrazíme, potom "otočíme" na dlhý (a čistý) formát, zobrazíme a výsledkom prepíšeme pôvodný objekt (Pozn.1: Funkcia print() okrem zobrazenia do konzoly vráti to isté, čo dostala na vstupe. Pozn.2: Takýto sled príkazov si môžme dovoliť iba ak sú jednotlivé príkazy v reťazi odladené, inak dôjde k prepisu vstupného súboru údajov a je treba ho znova načítať.).
+
+```{r }
+table4b <- table4b %>% 
+  print() %>% 
+  pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "population") %>% 
+  print()
+```
+
+Obe tabuľky sa prekrývajú v dvoch stĺpcoch a každá obsahuje aj unikátne stĺpce, je teda prirodzené ich zlúčiť, aby údaje z nich boli dostupné na jednom mieste, a to funkciou left_join() z balíka *dplyr*.
+
+```{r }
+dplyr::left_join(table4a, table4b)
+```
+
+
+## Zber riadkov
+
+V tabuľke *table2* sú pozorovania rozložené do dvoch riadkov
+
+```{r }
+table2
+```
+
+Potrebujeme identifikovať stĺpec, v ktorom sú názvy premenných (*type*) a stĺpec, v ktorom sú ich hodnoty (*count*), zvyšok je práca funkcie duálnej ku pivot_longer:
+
+```{r }
+table2 %>%
+  pivot_wider(names_from = type, values_from = count)
+```
+
+Skrátka, pivot_longer() tabuľky zoštíhľuje a predlžuje, naopak pivot_wider() robí tabuľky širšie a kratšie.
+
+## Rozdelenie a spojenie stĺpcov
+
+Iný problém nastane, ak stĺpec obsahuje viac než jednu premennú, ako je tomu v nasledujúcej tabuľke,
+
+```{r }
+table3
+```
+
+kde sa pod názvom *rate* nachádza podiel dvoch premenných, *cases/population*. Riešením je použiť funkciu separate(),
+
+```{r }
+table3 %>% 
+  separate(rate, into = c("cases", "population"), sep = "/", convert = TRUE)
+```
+
+kde argument *sep* definuje oddeľovací znak (môže byť aj regulárny výraz, prípadne počet znakov od začiatku) a *convert* povolí konverziu reťazca na číslo (alebo logickú hodnotu či NA). Niekedy môže byť užitočné rozdeliť jedno číslo (rok) na viacero (storočie, rok), hoci to dáta robí menej čistými
+
+```{r }
+table3 %>% 
+  separate(col = year, into = c("century", "year"), sep = 2)
+```
+
+Inverznú operáciu ku separate() zabezpečuje funkcia unite(), ktorá môže napraviť rozdelenie hodnôt jednej premennej v bunkách viacerých stĺpcoch (čiže nie v ich názvoch), napr.
+
+```{r }
+table5 %>% print() %>% 
+  unite(col = new, century, year, sep = "")
+```
+
+
+## Chýbajúce hodnoty
+
+Problémy pri príprave údajov môžu prísť aj s chýbajúcimi hodnotami. Hodnota môže byť chýbajúca 
+
+- explicitne, označená znakom NA,
+- implicitne, jednoducho v údajoch chýba.
+
+Trochu nadnesene: explicitne chýbajúca hodnota je prítomnosť absencie; implicitná zas absencia prítomnosti. Dokážete oba prípady identifikovať v nasledujúcej tabuľke?
+
+```{r }
+stocks <- tibble(
+  year   = c(2015, 2015, 2015, 2015, 2016, 2016, 2016),
+  qtr    = c(   1,    2,    3,    4,    2,    3,    4),
+  return = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
+)
+```
+
+V dôsledku toho, ako sú datasety reprezentované, možno z implicitne chýbajúcej hodnoty urobiť explicitnú NA, napr. konverziou na široký formát a späť
+
+```{r }
+stocks %>% 
+  pivot_wider(names_from = year, values_from = return) %>% 
+  print() %>% 
+  pivot_longer(
+    cols = c(`2015`, `2016`), 
+    names_to = "year", 
+    values_to = "return", 
+    values_drop_na = FALSE
+  )
+```
+
+Jednoduchšie je však použiť funkciu complete(),
+
+```{r }
+stocks %>% 
+  complete(year, qtr)
+```
+
+ktorá vezme súbor stĺpcov, vytvorí všetky kombinácie a doplní k nim originálne dáta, pričom do ostatných pozícií doplní "NA".  
+
+Niekedy explicitne chýbajúca hodnota môže značiť, že zastupuje duplikát predošlej hodnoty (a nikto sa neobťažoval doplniť ju). Vtedy sa na nahradenie NA použije funkcia fill(), ako v nasledujúcom príklade.
+
+```{r }
+treatment <- tribble(
+  ~ person,           ~ treatment, ~response,
+  "Derrick Whitmore", 1,           7,
+  NA,                 2,           10,
+  NA,                 3,           9,
+  "Katherine Burke",  1,           4
+)
+treatment %>% 
+  fill(person)
+```
+
+ 
+## Praktický príklad
+
+Na predošlej kapitole o vizualizácii pomocou ggplot2 sme si v poslednej časti ukázali tématickú mapu rozšírenia koronavírusu. Hoci dáta boli v čistom tvare, predsa bolo kvôli zlúčeniu dvoch datasetov (hranice krajín a vývoj pandémie) treba dočisťovať kvôli rozdielnym štandardom v názvosloví krajín.  
+Siahnime teraz po iných údajoch (CSSE Johns Hopkins University). Úlohou bude zobraziť časový rad počtu úmrtí v dôsledku COVID-19 vo vybraných krajinách odo dňa výskytu prvého prípadu. Inšpirácia pochádza z blogu  [@kajzar2020cekame]. Pre zmenu, na načítanie dát bude použitý balík *readr* (a jeho používateľsky jednoduchšia funkcia *read_csv*).
+
+```{r eval = FALSE}
+dat <- readr::read_csv(
+  "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+```
+```{r eval = FALSE, include = FALSE}
+#setwd("/media/tomas/SAM32/documents/math/edu/R_textbook")
+#readr::write_csv(dat, path = "data/time_series_covid19_deaths_global.csv")
+```
+Ak už odkaz nie je platný, je možné, že v ňom došlo len k drobnej zmene a internetovým vyhľadávačom sa dá nájsť aktuálna poloha súboru. V horšom prípadne je potrebné nájsť úplne nový zdroj údajov v podobnom formáte. Pre väčšie pohodlie prikladáme súbor aj [offline](data/time_series_covid19_deaths_global.csv).
+```{r}
+dat <- readr::read_csv("data/time_series_covid19_deaths_global.csv")
+dat[1:7]
+```
+Údaje sú zjavne v širokom formáte, pretože dátum sa rozprestiera v záhlaví stĺpcov. Každý riadok zodpovedá jednej krajine (prípadne jej provincii). Po odstránení referenčnej polohy a provincie (naše cieľové krajiny žiadne nemajú) a po transformácii (*pivot_longer*) bude každý riadok unikátnou kombináciou krajiny a dátumu. Zároveň vidno, že dátum je v tvare mm/dd/yy, je treba ho previesť do formy yyyy-mm-dd, ktorá je v našich končinách čitateľnejšia, a na to sa hodia nástroje z balíku *lubridate*.
+
+```{r}
+data_to_plot <- dat %>% 
+  dplyr::select(-"Province/State", -Lat, - Long) %>% 
+  dplyr::rename(Country = "Country/Region") %>% 
+  pivot_longer(-Country, names_to = "Date", values_to = "Deaths") %>% 
+  dplyr::mutate(Date = lubridate::mdy(Date)) %>% 
+  dplyr::filter(Country %in% c("Slovakia","Czechia", "Hungary", "Poland", "Ukraine"),
+                Deaths >= 1)
+data_for_labels <- data_to_plot %>% 
+  dplyr::group_by(Country) %>% 
+  dplyr::slice(which.max(Date))
+
+data_to_plot %>% 
+  ggplot(mapping = aes(x = Date, y = Deaths, group = Country, color = Country)) + 
+  geom_line() +
+  labs(x = "dátum", y = NULL, title = "Počet úmrtí v okolí Slovenska") +
+  # umiestnenie popisu radov do grafu (pre efekt)
+  theme(legend.position = "none") +
+  geom_text(data = data_for_labels, aes(label = Country), hjust = -0.1, vjust = 0) +
+  scale_x_date(expand = c(0.15, 1))  # vyhradenie miesta za poslednou hodnotou 
+```
+
+Aby bola zohľadnená aj ľudnatosť krajiny, vyjadrime úmrtnosť na vírus v relatívnej mierke ako podiel počtu prípadov na 1 milión obyvateľov. Na to treba dataset o počte obyvateľov. Načítame najmenší [CSV súbor](data/population-figures-by-country-csv.csv), aký sa dá zbežným hľadaním na internete nájsť.
+
+```{r eval = FALSE}
+dat_population <- readr::read_csv(
+  "https://datahub.io/JohnSnowLabs/population-figures-by-country/r/population-figures-by-country-csv.csv")
+```
+```{r eval = FALSE, include = FALSE}
+#setwd("/media/tomas/SAM32/documents/math/edu/R_textbook")
+#readr::write_csv(dat_population, path = "data/population-figures-by-country-csv.csv")
+```
+```{r}
+dat_population <- readr::read_csv("data/population-figures-by-country-csv.csv")
+dat_population[1:5]
+```
+
+Štruktúra je podobná ako v predošlom *csv* súbore, nám bude stačiť posledný rok, názvy niektorých krajín však treba prekódovať (v komplexnejšom prípade pomocou balíku *countrycode*). Potom už len ponechať predtým vybrané krajiny, spojiť s datasetom úmrtí, vytvoriť relatívnu početnosť a zobraziť. Všimnime si použitie funkcie *aes_string* vtedy, keď treba na premenné odkázať znakovým reťazcom (napr. ak názov obsahuje medzery).
+
+```{r }
+dat_population %>% 
+  dplyr::transmute(Country = dplyr::recode(Country, 
+                             "Slovak Republic" = "Slovakia", 
+                             "Czech Republic" = "Czechia"), 
+            Population = Year_2016) %>% 
+  dplyr::filter(Country %in% data_for_labels$Country) %>% 
+  dplyr::right_join(data_to_plot, by = "Country") %>% 
+  dplyr::mutate("Confirmed per milion" = Deaths/Population*1e+06) %>% 
+  ggplot(mapping = aes_string(x = "Date", y = as.name("Confirmed per milion"), 
+                              group = "Country", color = "Country")) + 
+  geom_line()
+```
+
+Zdá sa, že Ukrajina je na tom s úmrtnosťou na COVID-19 na začiatku roku 2021 najlepšie spomedzi krajín strednej Európy - nielen z pohľadu relatívneho počtu ale aj rýchlosti rastu.  
+
+
+Otázky na zamyslenie:
+
+1. Vedeli by ste zostaviť takýto graf časových radov (alebo kartogram) z iných datasetov, než boli použité v lekcii? Môžete si ich vyhľadať alebo použiť napr. tie zo stránky https://ourworldindata.org/coronavirus-source-data.
+2. Aký iný graf by bol podľa vás užitočný v súvislosti s aktuálnou pandémiou? Vedeli by ste ho zrealizovať?
+3. Je zjavné, že počty potvrdených prípadov nákazy alebo úmrtí iba obmedzene odzrkadľujú skutočné rozšírenie v populácii. To je veľmi závislé od viacerých faktorov, napr. od dostupnosti testov na vírus, rozsahu ich nasadenia v teréne, kapacity zdravotníckych zariadení či ochoty jednotlivých štátov pravdivo zverejňovať svoje štatistiky. Koľko by mohol byť skutočný počet infikovaných ľudí v jednotlivých krajinách? V začiatkoch pandémie bolo zaujímavé čítať napr. blogy https://medium.com/@tomaspueyo/ -- poznáte iné také, ktoré sa držia faktov a snažia o nadhľad?
+
+
+## Cvičenie {#cistenie-cvicenie}
+
+1. Načítajte dataset *USArrest* z balíku *datasets*, zoznámte sa s významom stĺpcov. Ktoré predstavujú druh zločinu?
+2. Pomocou pipe operátora vytvorte sekvenciu príkazov (v zátvorke je tip, čo pri tom použiť), ktorá
+   1. začne datasetom *USArrest*,
+   2. pridá premennú *state* s názvami riadkov,  (funkcie *mutate* alebo *cbind*, `rownames(.)`)
+   3. prevedie tabuľku do dlhého formátu, teda zoskupí názvy zločinov do premennej *crime* a počty zatknutí do premennej *cases*, (*pivot_longer*) 
+   4. bodovým grafom zobrazí vzťah medzi percentom ľudnatosti v mestských oblastiach (na osi *x*) a počtom prípadov (v logaritmickej mierke na osi *y*), pričom farebne sú odlíšené jednotlivé zločiny.  (*ggplot* + *scale_y_login10*)
+3. V predošlom príklade zmeňte bodový graf na textový (s názvami štátov) a jednotlivé zločiny zobrazte vo svojom vlastnom grafe pod sebou. Zvážte použitie individuálnej mierky na osi *y* a prispôsobte veľkosť textu. (*geom_text* + *facet_grid*, *scales*, *size*)
+4. Adam, Bibiana a Cindy sa prihlásili na kurz. Pred ním, počas aj po ňom písali test (hodnotenie 0-10 bodov), výsledky však neboli importované poriadne, niečo sa z nich možno aj stratilo (tabuľka definovaná nižšie, poradie riadkov zodpovedá abecednému radeniu mien študentov). Príkazy sa snažte reťaziť a preferujte funkcie z balíkov ekosystému *tidyverse*.  
+Úlohy:
+
+   * Rozdeľte hodnotenie do stĺpcov podľa času testovania, pripojte mená a pomocou *ggplot* zobrazte vývoj ich vedomostí do spoločného grafu. 
+   * Kto z nich sa ulieval a kto snažil? 
+   * Čo by ste zmenili vo funkcii *separate*, ak by ste sa dozvedeli, že Cindy sa prvého testu nemohla zúčastniť?
+```{r}
+tibble(x = c("8,8,3", "2,4,9", "5,6"))
+```
+

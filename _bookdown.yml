@@ -1,0 +1,10 @@
+book_filename: "R_ucebnica"
+delete_merged_file: true
+new_session: yes
+language:
+  ui:
+    chapter_name: "Kapitola "
+  label:
+    fig: 'Obrázok'
+    tab: 'Tabuľka'
+    eq: 'Rovnica'
